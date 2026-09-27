@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookStatus {
+  WANT_TO_READ
+  READING
+  COMPLETED
+}
+
+model Bookshelf {
+  id            Int        @id @default(autoincrement())
+  workId        String     @unique @map("work_id")
+
+  title         String
+  author        String?
+  coverId       Int?       @map("cover_id")
+  description   String?    @db.Text
+  pageCount     Int?       @map("page_count")
+  publishedYear Int?       @map("published_year")
+
+  subjects      Json?
+
+  status        BookStatus @default(WANT_TO_READ)
+
+  currentPage   Int        @default(0) @map("current_page")
+  rating        Int?
+  note          String?    @db.VarChar(1000)
+
+  startedAt     DateTime?  @map("started_at")
+  finishedAt    DateTime?  @map("finished_at")
+
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("bookshelf")
+}
