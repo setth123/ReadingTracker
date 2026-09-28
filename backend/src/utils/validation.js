@@ -29,24 +29,24 @@ export const createBookshelfSchema = z.object({
 
 export const updateBookshelfSchema = z.object({
   currentPage: z.coerce
-    .number()
+    .number({
+    invalid_type_error: "Current page must be a number",
+  })
     .int("Current page must be an integer")
     .min(0, "Current page must be at least 0")
     .optional(),
-
+  
   status: z
     .enum(["WANT_TO_READ", "READING", "COMPLETED"])
     .optional(),
 
   rating: z
-    .union([
-      z.coerce.number().int().min(1).max(5),
-      z.literal(""),
-    ])
-    .optional()
-    .transform((value) => {
-      return value === "" ? null : value;
-    }),
+    .number()
+    .int("Rating must be an integer")
+    .min(1, "Rating must be at least 1")
+    .max(5, "Rating must be at most 5")
+    .nullable()
+    .optional(),
 
   note: z
     .string()

@@ -1,4 +1,4 @@
-import {searchPaginatedBooks, getWork, getAuthor} from "../services/openlibrary.service.js";
+import {searchPaginatedBooks, getWork, getAuthor,getPageCount} from "../services/openlibrary.service.js";
 import {mapSearchBook, mapWorkBook} from "../utils/book.mapper.js";
 import { successResponse } from "../utils/response.js";
 
@@ -34,35 +34,20 @@ export const getBookDetail = async (req, res, next) => {
     const work = await getWork(workId);
 
     const authors = await Promise.all(
-      (work.authors || []).map(async (item) => {
-        const authorKey = item.author?.key;
-
-        if (!authorKey) {
+      (work.authors || []).map(async (author) => {
+        const authorId = author.author?.key?.replace("/authors/","");
+        if (!authorId) {
           return null;
         }
 
-        const authorId = authorKey.replace("/authors/", "");
-
-        try {
-          const author =
-            await getAuthor(authorId);
-
-          return {
-            id: authorId,
-            name: author.name || "Unknown author"
-          };
-        } catch {
-          return {
-            id: authorId,
-            name: "Unknown author"
-          };
-        }
+        const authorData = await getAuthor(authorId);
+        return authorData.name || null;
       })
     );
 
     const validAuthors = authors.filter(Boolean);
-    console.log("Valid Authors:", validAuthors);
-    const book = mapWorkBook(work, validAuthors);
+    const pageCount = await getPageCount(workId);
+    const book = mapWorkBook(work, validAuthors, pageCount);
 
     return successResponse(res, book);
   } catch (error) {

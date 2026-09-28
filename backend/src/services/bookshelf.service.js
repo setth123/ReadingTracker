@@ -1,6 +1,7 @@
 import prisma from "../utils/prisma.js";
 import {getPageCount,getWork, getAuthor} from "../services/openlibrary.service.js";
 import AppError from "../utils/AppError.js";
+import { mapBookshelfBook } from "../utils/book.mapper.js";
 
 export const getAllBooks = async (status=undefined) => {
 
@@ -29,7 +30,7 @@ export const getAllBooks = async (status=undefined) => {
       }
     })    
   ]);
-  return { books,statistics: {total, wantToRead, reading, completed } };
+  return { books: books.map(mapBookshelfBook),statistics: {total, wantToRead, reading, completed } };
 };
 
 export const getBookById = async (id) => {
@@ -49,7 +50,7 @@ export const createBookShelf = async ({ workId, status }) => {
 
   if (existingBook) {
     throw new AppError(
-      "Book already exists in bookshelf",
+      "Sách đã tồn tại trong giá sách",
       409
     );
   }
@@ -132,7 +133,7 @@ export const createBookShelf = async ({ workId, status }) => {
   catch(error){
     if(error.code="P2002"){
       throw new AppError(
-        "Book already exists in bookshelf",
+        "Sách đã tồn tại trong giá sách",
         409
       );
     }
@@ -146,7 +147,7 @@ export const updateBookShelf = async (id, data) => {
   });
 
   if (!book) {
-    throw new AppError("Book not found", 404);
+    throw new AppError("Không tìm thấy sách", 404);
   }
 
   let currentPage = data.currentPage ?? book.currentPage;
@@ -154,7 +155,7 @@ export const updateBookShelf = async (id, data) => {
 
   if (book.pageCount !== null && currentPage > book.pageCount) {
     throw new AppError(
-      `Current page cannot exceed total pages (${book.pageCount})`,
+      `Số trang hiện tại không được vượt quá 300. (${book.pageCount})`,
       400
     );
   }
@@ -162,35 +163,27 @@ export const updateBookShelf = async (id, data) => {
   let startedAt = book.startedAt;
   let finishedAt = book.finishedAt;
 
-  // Lần đầu chuyển sang READING
-  if (
-    status === "READING" &&
-    book.status !== "READING" &&
-    !book.startedAt
-  ) {
+  // First transition to READING
+  if (status === "READING" && book.status !== "READING" && !book.startedAt) {
     startedAt = new Date();
   }
 
-  // Nếu đọc đến trang cuối -> tự động COMPLETED
-  if (
-    book.pageCount !== null &&
-    currentPage === book.pageCount
-  ) {
+  // React to last page -> COMPLETED
+  if (book.pageCount !== null && currentPage === book.pageCount) {
     status = "COMPLETED";
   }
 
-  // Khi chuyển sang COMPLETED
-  if (
-    status === "COMPLETED" &&
-    book.status !== "COMPLETED"
-  ) {
+  // Transition to COMPLETED
+  if (status === "COMPLETED" && book.status !== "COMPLETED") {
     finishedAt = new Date();
 
-    // Nếu chưa từng có startedAt thì ghi luôn
     if (!startedAt) {
       startedAt = new Date();
     }
   }
+
+  // If the book leaves COMPLETED, the old finishedAt should no longer represent the current reading session
+  if(status !== "COMPLETED" && book.status === "COMPLETED")finishedAt=null;
 
   return prisma.bookshelf.update({
     where: { id: Number(id) },
@@ -217,7 +210,7 @@ export const deleteBookShelf = async (id) => {
   });
 
   if (!book) {
-    throw new AppError("Book not found", 404);
+    throw new AppError("Không tìm thấy sách", 404);
   }
 
   await prisma.bookshelf.delete({

@@ -1,5 +1,5 @@
 const OPEN_LIBRARY_URL = process.env.OPEN_LIBRARY_URL || "https://openlibrary.org";
-
+import AppError from "../utils/AppError.js";
 export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
   const url = new URL(`${OPEN_LIBRARY_URL}/search.json`);
 
@@ -10,7 +10,7 @@ export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error("Failed to fetch books from Open Library");
+    throw new AppError("Failed to fetch books from Open Library", 502);
   }
 
   const data = await response.json();
@@ -46,7 +46,7 @@ export const getEditions = async (workId) => {
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error("Failed to fetch book editions from Open Library");
+    throw new AppError("Failed to fetch book editions from Open Library", 502);
   }
 
   return response.json();
@@ -58,16 +58,16 @@ export const getAuthor = async (authorId) => {
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error("Failed to fetch author from Open Library");
+    throw new AppError("Failed to fetch author from Open Library");
   }
 
   return response.json();
 };
 
 export const getPageCount = async (workId) => {
-  const data = await getEditions(workId);
+  const editions = await getEditions(workId);
 
-  const edition = data.entries?.find(
+  const edition = editions.entries?.find(
     (item) =>
       Number.isInteger(item.number_of_pages) &&
       item.number_of_pages > 0
