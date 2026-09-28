@@ -1,13 +1,35 @@
 import prisma from "../utils/prisma.js";
-import {getPageCount} from "../utils/openLibrary.js";
-import AppError from "../utils/appError.js";
+import {getPageCount,getWork, getAuthor} from "../services/openlibrary.service.js";
+import AppError from "../utils/AppError.js";
 
-export const getAllBooks = async () => {
-  return prisma.bookshelf.findMany({
+export const getAllBooks = async (status=undefined) => {
+
+  const where = status? { status }: {};
+  const books=await prisma.bookshelf.findMany({
+    where,
     orderBy: {
       createdAt: "desc"
     }
   });
+  const [total,wantToRead, reading, completed] = await Promise.all([
+    prisma.bookshelf.count(),
+    prisma.bookshelf.count({
+      where: {
+        status: "WANT_TO_READ"
+      }
+    }),
+    prisma.bookshelf.count({
+      where: {
+        status: "READING"
+      }
+    }),
+    prisma.bookshelf.count({
+      where: {
+        status: "COMPLETED"
+      }
+    })    
+  ]);
+  return { books,statistics: {total, wantToRead, reading, completed } };
 };
 
 export const getBookById = async (id) => {
@@ -18,7 +40,7 @@ export const getBookById = async (id) => {
   });
 };
 
-export const createBook = async ({ workId, status }) => {
+export const createBookShelf = async ({ workId, status }) => {
   const existingBook = await prisma.bookshelf.findUnique({
     where: {
       workId
@@ -32,7 +54,7 @@ export const createBook = async ({ workId, status }) => {
     );
   }
 
-  const work = await openLibraryService.getWork(workId);
+  const work = await getWork(workId);
 
   const pageCount = await getPageCount(workId);
 
@@ -50,8 +72,7 @@ export const createBook = async ({ workId, status }) => {
         const authorId = key.replace("/authors/", "");
 
         try {
-          const author =
-            await openLibraryService.getAuthor(authorId);
+          const author = await getAuthor(authorId);
 
           return author.name || "Unknown author";
         } catch {
@@ -75,28 +96,133 @@ export const createBook = async ({ workId, status }) => {
         work.first_publish_date.match(/\d{4}/)?.[0]
       ) || null
     : null;
+  
 
-  const book = await prisma.bookshelf.create({
-    data: {
-      workId,
-      title,
-      author,
-      coverId: work.covers?.[0] || null,
-      description,
-      pageCount,
-      publishedYear,
-      subjects: work.subjects || [],
-      status,
-      currentPage,
-      startedAt: status === "READING" || isCompleted
-        ? now
-        : null,
+  const isCompleted = status === "COMPLETED";
 
-      finishedAt: isCompleted
-        ? now
-        : null
+  const currentPage = isCompleted && pageCount
+    ? pageCount
+    : 0;
+
+  const now = new Date();
+  try{
+      const book = await prisma.bookshelf.create({
+      data: {
+        workId,
+        title,
+        author,
+        coverId: work.covers?.[0] || null,
+        description,
+        pageCount,
+        publishedYear,
+        subjects: work.subjects || [],
+        status,
+        currentPage,
+        startedAt: status === "READING" || isCompleted
+          ? now
+          : null,
+
+        finishedAt: isCompleted
+          ? now
+          : null
+      }
+    });
+    return book;
+  }
+  catch(error){
+    if(error.code="P2002"){
+      throw new AppError(
+        "Book already exists in bookshelf",
+        409
+      );
     }
+    throw error;
+  }
+};
+
+export const updateBookShelf = async (id, data) => {
+  const book = await prisma.bookshelf.findUnique({
+    where: { id: Number(id) },
   });
 
-  return book;
+  if (!book) {
+    throw new AppError("Book not found", 404);
+  }
+
+  let currentPage = data.currentPage ?? book.currentPage;
+  let status = data.status ?? book.status;
+
+  if (book.pageCount !== null && currentPage > book.pageCount) {
+    throw new AppError(
+      `Current page cannot exceed total pages (${book.pageCount})`,
+      400
+    );
+  }
+
+  let startedAt = book.startedAt;
+  let finishedAt = book.finishedAt;
+
+  // Lần đầu chuyển sang READING
+  if (
+    status === "READING" &&
+    book.status !== "READING" &&
+    !book.startedAt
+  ) {
+    startedAt = new Date();
+  }
+
+  // Nếu đọc đến trang cuối -> tự động COMPLETED
+  if (
+    book.pageCount !== null &&
+    currentPage === book.pageCount
+  ) {
+    status = "COMPLETED";
+  }
+
+  // Khi chuyển sang COMPLETED
+  if (
+    status === "COMPLETED" &&
+    book.status !== "COMPLETED"
+  ) {
+    finishedAt = new Date();
+
+    // Nếu chưa từng có startedAt thì ghi luôn
+    if (!startedAt) {
+      startedAt = new Date();
+    }
+  }
+
+  return prisma.bookshelf.update({
+    where: { id: Number(id) },
+    data: {
+      currentPage,
+      status,
+      rating: data.rating !== undefined
+        ? data.rating
+        : book.rating,
+      note: data.note !== undefined
+        ? data.note
+        : book.note,
+      startedAt,
+      finishedAt,
+    },
+  });
+};
+
+export const deleteBookShelf = async (id) => {
+  const book = await prisma.bookshelf.findUnique({
+    where: {
+      id: Number(id),
+    },
+  });
+
+  if (!book) {
+    throw new AppError("Book not found", 404);
+  }
+
+  await prisma.bookshelf.delete({
+    where: {
+      id: Number(id),
+    },
+  });
 };

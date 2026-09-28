@@ -23,8 +23,30 @@ export const getWork = async (workId) => {
 
   const response = await fetch(url);
 
+  if (response.status === 404) {
+    throw new AppError(
+      "Book not found in Open Library",
+      404
+    );
+  }
+
   if (!response.ok) {
-    throw new Error("Failed to fetch book from Open Library");
+    throw new AppError(
+      "Failed to fetch book from Open Library",
+      502
+    );
+  }
+
+  return response.json();
+};
+
+export const getEditions = async (workId) => {
+  const url = `${OPEN_LIBRARY_URL}/works/${workId}/editions.json?limit=20`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch book editions from Open Library");
   }
 
   return response.json();

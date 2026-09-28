@@ -1,9 +1,10 @@
-import  {getAllBooks, getBookById} from "../services/bookshelf.service.js";
+import  {getAllBooks, getBookById,createBookShelf,updateBookShelf,deleteBookShelf} from "../services/bookshelf.service.js";
 import { successResponse } from "../utils/response.js";
 
 export const getBooks = async (req, res, next) => {
   try {
-    const books = await getAllBooks();
+    const {status}=req.validateQuery || {};
+    const books = await getAllBooks(status);
 
     return successResponse(res, books);
   } catch (error) {
@@ -25,7 +26,7 @@ export const getBook = async (req, res, next) => {
 
 export const createBook = async(req, res,next)=>{
     try {
-      const book = await bookshelfService.createBook(
+      const book = await createBookShelf(
         req.validatedBody
       );
 
@@ -34,3 +35,29 @@ export const createBook = async(req, res,next)=>{
       next(error);
     }
 }
+
+export const updateBook = async (req, res, next) => {
+  try {
+    const book = await updateBookShelf(
+      req.params.id,
+      req.validatedBody
+    );
+
+    return successResponse(res, book);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteBook = async (req, res, next) => {
+  try {
+    await deleteBookShelf(req.params.id);
+
+    return successResponse(res, {
+      message: "Book deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

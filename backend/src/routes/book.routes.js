@@ -1,10 +1,8 @@
 import express from "express";
 
 import {searchBooks,getBookDetail} from "../controllers/book.controller.js";
-import {validateQuery,createBookshelfSchema} from "../middelwares/validate.middleware.js";
-
-import searchBooksSchema from "../utils/validation.js";
-
+import {searchBooksSchema} from "../utils/validation.js";
+import {validateQuery} from "../middelwares/validate.middleware.js";
 const router = express.Router();
 
 router.get(
