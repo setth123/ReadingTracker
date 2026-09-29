@@ -1,38 +1,37 @@
 <script setup>
 import { onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import {getBookDetail} from "../services/book.service.js";
 
-import {getBookshelf, addToBookshelf,} from "../services/bookshelf.service.js";
+import {getBookshelf,addToBookshelf,} from "../services/bookshelf.service.js";
+
+import "../assets/book-detail.css";
 
 const route = useRoute();
+const router = useRouter();
 
 const book = ref(null);
-
 const loading = ref(true);
 const error = ref("");
 
 const isAdded = ref(false);
-
-const showStatusModal = ref(false);
+const showAddModal = ref(false);
+const selectedStatus = ref("WANT_TO_READ");
+const adding = ref(false);
 
 const loadBook = async () => {
   loading.value = true;
   error.value = "";
 
   try {
-    const response = await getBookDetail(
-      route.params.workId
-    );
-
+    const response = await getBookDetail(route.params.workId);
     book.value = response.data;
   } catch (err) {
-    console.error(err);
-
-    error.value =
+    alert(
       err.response?.data?.message ||
-      "Failed to load book";
+        "Không thể tải thông tin sách."
+    );
   } finally {
     loading.value = false;
   }
@@ -42,40 +41,63 @@ const checkBookshelf = async () => {
   try {
     const response = await getBookshelf();
 
-    isAdded.value = response.data.books.some(
-      (item) =>
-        item.workId === route.params.workId
+    const books = response.data.books || [];
+
+    isAdded.value = books.some(
+      (item) => item.workId === route.params.workId
     );
   } catch (err) {
+    // Không chặn trang detail nếu kiểm tra bookshelf thất bại.
     console.error(err);
   }
 };
 
 const openAddModal = () => {
-  showStatusModal.value = true;
+  if (isAdded.value) {
+    return;
+  }
+
+  selectedStatus.value = "WANT_TO_READ";
+  showAddModal.value = true;
 };
 
 const closeAddModal = () => {
-  showStatusModal.value = false;
+  if (adding.value) {
+    return;
+  }
+
+  showAddModal.value = false;
 };
 
-const confirmAddBook = async (status) => {
+const confirmAddToBookshelf = async () => {
+  if (adding.value || !book.value) {
+    return;
+  }
+
+  adding.value = true;
+
   try {
     await addToBookshelf({
       workId: book.value.workId,
-      status,
+      status: selectedStatus.value,
     });
 
     isAdded.value = true;
+    showAddModal.value = false;
 
-    closeAddModal();
+    alert("Đã thêm sách vào tủ sách.");
   } catch (err) {
-    console.error(err);
-
-    error.value =
+    alert(
       err.response?.data?.message ||
-      "Failed to add book to shelf";
+        "Không thể thêm sách vào tủ sách."
+    );
+  } finally {
+    adding.value = false;
   }
+};
+
+const goBack = () => {
+  router.back();
 };
 
 onMounted(async () => {
@@ -83,110 +105,264 @@ onMounted(async () => {
   await checkBookshelf();
 });
 </script>
+
 <template>
-  <main class="book-detail-page">
-    <div v-if="loading">
-      Loading book...
+  <div class="book-detail-page">
+    <!-- Loading -->
+    <div
+      v-if="loading"
+      class="detail-state"
+    >
+      <div class="state-icon">📖</div>
+      <h2>Đang tải thông tin sách...</h2>
+      <p>Vui lòng chờ trong giây lát.</p>
     </div>
 
-    <div v-else-if="error" class="error">
-      {{ error }}
+    <!-- Error -->
+    <div
+      v-else-if="error"
+      class="detail-state detail-state-error"
+    >
+      <div class="state-icon">!</div>
+      <h2>Không thể tải sách</h2>
+      <p>{{ error }}</p>
+
+      <button
+        class="btn btn-primary"
+        @click="loadBook"
+      >
+        Thử lại
+      </button>
     </div>
 
-    <div v-else-if="book" class="book-detail">
-      <div class="book-detail-cover">
-        <img
-          v-if="book.coverUrl"
-          :src="book.coverUrl"
-          :alt="book.title"
-        />
+    <!-- Book detail -->
+    <template v-else-if="book">
+      <button
+        class="back-button"
+        @click="goBack"
+      >
+        <span>←</span>
+        Quay lại
+      </button>
 
-        <div v-else class="no-cover">
-          No Cover
-        </div>
-      </div>
+      <section class="book-detail-card">
+        <!-- Cover -->
+        <div class="detail-cover-wrapper">
+          <div class="detail-cover">
+            <img
+              v-if="book.coverUrl"
+              :src="book.coverUrl"
+              :alt="book.title"
+            />
 
-      <div class="book-detail-info">
-        <h1>{{ book.title }}</h1>
-
-        <p>
-          <strong>Authors:</strong>
-          {{ book.authors?.join(", ") || "Unknown" }}
-        </p>
-
-        <p>
-          <strong>Published:</strong>
-          {{ book.publishedYear || "Unknown" }}
-        </p>
-
-        <p>
-          <strong>Pages:</strong>
-          {{ book.pageCount || "Unknown" }}
-        </p>
-
-        <div>
-          <strong>Description</strong>
-
-          <p>
-            {{ book.description || "No description available." }}
-          </p>
-        </div>
-
-        <div v-if="book.subjects?.length">
-          <strong>Subjects</strong>
-
-          <div class="subjects">
-            <span
-              v-for="subject in book.subjects.slice(0, 15)"
-              :key="subject"
-              class="subject"
+            <div
+              v-else
+              class="detail-no-cover"
             >
-              {{ subject }}
-            </span>
+              <span>📖</span>
+              <small>No Cover</small>
+            </div>
           </div>
         </div>
 
-        <button
-          :disabled="isAdded"
-          @click="openAddModal"
-        >
-          {{ isAdded ? "Đã thêm" : "Add to Shelf" }}
-        </button>
-      </div>
-    </div>
+        <!-- Main information -->
+        <div class="detail-content">
+          <div class="detail-heading">
+            <span
+              v-if="isAdded"
+              class="detail-added-badge"
+            >
+              ✓ Đã có trong tủ sách
+            </span>
 
+            <h1>{{ book.title }}</h1>
+
+            <p class="detail-author">
+              {{ book.authors?.join(", ") || "Unknown author" }}
+            </p>
+          </div>
+
+          <div class="detail-meta">
+            <div
+              v-if="book.publishedYear"
+              class="meta-item"
+            >
+              <span class="meta-label">Năm xuất bản</span>
+              <strong>{{ book.publishedYear }}</strong>
+            </div>
+
+            <div
+              v-if="book.pageCount"
+              class="meta-item"
+            >
+              <span class="meta-label">Số trang</span>
+              <strong>{{ book.pageCount }}</strong>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h2>Mô tả</h2>
+
+            <p
+              v-if="book.description"
+              class="description"
+            >
+              {{ book.description }}
+            </p>
+
+            <p
+              v-else
+              class="empty-description"
+            >
+              Chưa có mô tả cho cuốn sách này.
+            </p>
+          </div>
+
+          <div
+            v-if="book.subjects?.length"
+            class="detail-section"
+          >
+            <h2>Chủ đề</h2>
+
+            <div class="subjects">
+              <span
+                v-for="subject in book.subjects"
+                :key="subject"
+                class="subject-tag"
+              >
+                {{ subject }}
+              </span>
+            </div>
+          </div>
+
+          <div class="detail-action">
+            <button
+              v-if="!isAdded"
+              class="btn btn-primary detail-add-button"
+              @click="openAddModal"
+            >
+              <span>＋</span>
+              Thêm vào tủ sách
+            </button>
+
+            <button
+              v-else
+              class="btn detail-added-button"
+              disabled
+            >
+              <span>✓</span>
+              Đã thêm vào tủ sách
+            </button>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <!-- Add modal -->
     <div
-      v-if="showStatusModal"
-      class="modal-overlay"
+      v-if="showAddModal"
+      class="detail-modal-overlay"
       @click.self="closeAddModal"
     >
-      <div class="modal">
-        <h2>Add to Shelf</h2>
+      <div class="detail-modal">
+        <div class="modal-header">
+          <div>
+            <h2>Thêm vào tủ sách</h2>
+            <p>{{ book?.title }}</p>
+          </div>
 
-        <p>{{ book.title }}</p>
+          <button
+            class="modal-close"
+            :disabled="adding"
+            @click="closeAddModal"
+          >
+            ×
+          </button>
+        </div>
 
-        <button
-          @click="confirmAddBook('WANT_TO_READ')"
-        >
-          Want to Read
-        </button>
+        <div class="modal-body">
+          <p class="modal-description">
+            Chọn trạng thái ban đầu cho cuốn sách:
+          </p>
 
-        <button
-          @click="confirmAddBook('READING')"
-        >
-          Reading
-        </button>
+          <div class="status-options">
+            <label
+              class="status-option"
+              :class="{
+                selected:
+                  selectedStatus === "WANT_TO_READ",
+              }"
+            >
+              <input
+                v-model="selectedStatus"
+                type="radio"
+                value="WANT_TO_READ"
+              />
 
-        <button
-          @click="confirmAddBook('COMPLETED')"
-        >
-          Completed
-        </button>
+              <span class="status-option-content">
+                <strong>Muốn đọc</strong>
+                <small>Đưa sách vào danh sách chờ đọc</small>
+              </span>
+            </label>
 
-        <button @click="closeAddModal">
-          Cancel
-        </button>
+            <label
+              class="status-option"
+              :class="{
+                selected:
+                  selectedStatus === "READING",
+              }"
+            >
+              <input
+                v-model="selectedStatus"
+                type="radio"
+                value="READING"
+              />
+
+              <span class="status-option-content">
+                <strong>Đang đọc</strong>
+                <small>Bắt đầu theo dõi tiến độ đọc</small>
+              </span>
+            </label>
+
+            <label
+              class="status-option"
+              :class="{
+                selected:
+                  selectedStatus === "COMPLETED",
+              }"
+            >
+              <input
+                v-model="selectedStatus"
+                type="radio"
+                value="COMPLETED"
+              />
+
+              <span class="status-option-content">
+                <strong>Đã đọc</strong>
+                <small>Đánh dấu sách đã hoàn thành</small>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button
+            class="btn btn-secondary"
+            :disabled="adding"
+            @click="closeAddModal"
+          >
+            Huỷ
+          </button>
+
+          <button
+            class="btn btn-primary"
+            :disabled="adding"
+            @click="confirmAddToBookshelf"
+          >
+            {{ adding ? "Đang thêm..." : "Thêm vào tủ" }}
+          </button>
+        </div>
       </div>
     </div>
-  </main>
+  </div>
 </template>
