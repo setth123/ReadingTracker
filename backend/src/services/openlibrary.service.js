@@ -1,6 +1,25 @@
 const OPEN_LIBRARY_URL = process.env.OPEN_LIBRARY_URL || "https://openlibrary.org";
 import AppError from "../utils/AppError.js";
+import {mapWorkBook} from "../utils/book.mapper.js";
+
+
+const bookDetailCache = new Map();
+
+const BOOK_DETAIL_CACHE_TTL = 5 * 60 * 1000;
+
+const searchCache = new Map();
+
+const SEARCH_CACHE_TTL = 5 * 60 * 1000;
+
 export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
+  const cacheKey = `${keyword.trim().toLowerCase()}:${page}:${limit}`;
+
+  const cached = searchCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL) {
+    return cached.value;
+  }
+
   const url = new URL(`${OPEN_LIBRARY_URL}/search.json`);
 
   url.searchParams.set("q", keyword);
@@ -14,6 +33,11 @@ export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
   }
 
   const data = await response.json();
+  
+  searchCache.set(cacheKey, {
+    value: data,
+    timestamp: Date.now(),
+  });
 
   return data;
 };
@@ -53,6 +77,7 @@ export const getEditions = async (workId) => {
 };
 
 export const getAuthor = async (authorId) => {
+
   const url = `${OPEN_LIBRARY_URL}/authors/${authorId}.json`;
 
   const response = await fetch(url);
@@ -61,10 +86,12 @@ export const getAuthor = async (authorId) => {
     throw new AppError("Failed to fetch author from Open Library");
   }
 
-  return response.json();
+  const author = await response.json();
+  return author;
 };
 
 export const getPageCount = async (workId) => {
+
   const editions = await getEditions(workId);
 
   const edition = editions.entries?.find(
@@ -73,5 +100,47 @@ export const getPageCount = async (workId) => {
       item.number_of_pages > 0
   );
 
-  return edition?.number_of_pages || null;
+  const pageCount = edition?.number_of_pages || null;
+
+  return pageCount;
+};
+
+export const getBookDetailData = async (workId) => {
+  const cached = bookDetailCache.get(workId);
+
+  if (cached && Date.now() - cached.timestamp < BOOK_DETAIL_CACHE_TTL) {
+    return cached.value;
+  }
+
+  const [work, pageCount] = await Promise.all([
+    getWork(workId),
+    getPageCount(workId),
+  ]);
+
+  const authors = await Promise.all(
+    (work.authors || []).map(async (author) => {
+      const authorId = author.author?.key?.replace("/authors/", "");
+
+      if (!authorId) {
+        return null;
+      }
+
+      const authorData = await getAuthor(authorId);
+
+      return authorData.name || null;
+    })
+  );
+
+  const book = mapWorkBook(
+    work,
+    authors.filter(Boolean),
+    pageCount
+  );
+
+  bookDetailCache.set(workId, {
+    value: book,
+    timestamp: Date.now(),
+  });
+
+  return book;
 };

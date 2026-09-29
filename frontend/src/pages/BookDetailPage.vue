@@ -25,8 +25,14 @@ const loadBook = async () => {
   error.value = "";
 
   try {
-    const response = await getBookDetail(route.params.workId);
-    book.value = response.data;
+    const [bookResponse, bookshelfResponse] = await Promise.all([
+      getBookDetail(route.params.workId),
+      getBookshelf(),
+    ]);
+    book.value = bookResponse.data;
+
+    const bookshelf = bookshelfResponse.data.books || [];
+    isAdded.value = bookshelf.some((item) => item.workId === route.params.workId);
   } catch (err) {
     alert(
       err.response?.data?.message ||
@@ -34,21 +40,6 @@ const loadBook = async () => {
     );
   } finally {
     loading.value = false;
-  }
-};
-
-const checkBookshelf = async () => {
-  try {
-    const response = await getBookshelf();
-
-    const books = response.data.books || [];
-
-    isAdded.value = books.some(
-      (item) => item.workId === route.params.workId
-    );
-  } catch (err) {
-    // Không chặn trang detail nếu kiểm tra bookshelf thất bại.
-    console.error(err);
   }
 };
 
@@ -102,7 +93,6 @@ const goBack = () => {
 
 onMounted(async () => {
   await loadBook();
-  await checkBookshelf();
 });
 </script>
 
@@ -290,7 +280,7 @@ onMounted(async () => {
               class="status-option"
               :class="{
                 selected:
-                  selectedStatus === "WANT_TO_READ",
+                  selectedStatus === 'WANT_TO_READ',
               }"
             >
               <input
@@ -309,7 +299,7 @@ onMounted(async () => {
               class="status-option"
               :class="{
                 selected:
-                  selectedStatus === "READING",
+                  selectedStatus === 'READING',
               }"
             >
               <input
@@ -328,7 +318,7 @@ onMounted(async () => {
               class="status-option"
               :class="{
                 selected:
-                  selectedStatus === "COMPLETED",
+                  selectedStatus === 'COMPLETED',
               }"
             >
               <input

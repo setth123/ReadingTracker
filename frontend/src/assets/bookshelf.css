@@ -417,3 +417,36 @@
     font-size: 22px;
   }
 }
+
+.book-dates {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.book-dates > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.book-dates span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.book-dates strong {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .book-dates {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

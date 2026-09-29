@@ -1,8 +1,8 @@
 import api from "./api.js";
 
-export const searchBooks = async (params) => {
+export const searchBooks = async (params,config = {}) => {
   const response = await api.get("/books/search", {
-    params,
+   ...config, params
   });
 
   return response.data;

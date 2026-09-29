@@ -88,6 +88,17 @@ const getProgress = (book) => {
   );
 };
 
+const formatDate = (date) => {
+    if (!date) {
+      return "—";
+    }
+
+    return new Intl.DateTimeFormat("vi-VN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(date));
+  };
+
 const updatePage = async (book, event) => {
   const value = event.target.value.trim();
 
@@ -131,6 +142,7 @@ const updatePage = async (book, event) => {
 
   const oldPage = book.currentPage;
   const oldStatus = book.status;
+  
 
   try {
     const response = await updateBookshelfBook(book.id, {
@@ -465,6 +477,23 @@ onMounted(loadBookshelf);
               }"
             ></div>
           </div>
+
+          <div class="book-dates">
+        <div>
+          <span>Thêm vào tủ</span>
+          <strong>{{ formatDate(book.createdAt) }}</strong>
+        </div>
+
+        <div>
+          <span>Bắt đầu đọc</span>
+          <strong>{{ formatDate(book.startedAt) }}</strong>
+        </div>
+
+        <div>
+          <span>Hoàn thành</span>
+          <strong>{{ formatDate(book.finishedAt) }}</strong>
+        </div>
+      </div>
 
           <div
             class="book-actions"

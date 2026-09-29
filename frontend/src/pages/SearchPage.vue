@@ -1,14 +1,23 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onBeforeUnmount,watch } from "vue";
 import { useRouter } from "vue-router";
 
 import BookCard from "../components/BookCard.vue";
-import {searchBooks} from "../services/book.service.js";
-import {getBookshelf, addToBookshelf,} from "../services/bookshelf.service.js";
-  
+import { searchBooks } from "../services/book.service.js";
+import {
+  getBookshelf,
+  addToBookshelf,
+} from "../services/bookshelf.service.js";
+
 import "../assets/search.css";
 
 const router = useRouter();
+
+
+
+// ===============================
+// STATE
+// ===============================
 
 const keyword = ref("");
 const books = ref([]);
@@ -24,23 +33,96 @@ const showAddModal = ref(false);
 const selectedBook = ref(null);
 const selectedStatus = ref("WANT_TO_READ");
 
+// ===============================
+// SEARCH CONTROL
+// ===============================
+
+let searchTimeout = null;
+let searchController = null;
+
+// ===============================
+// RESET SEARCH
+// ===============================
+
+const resetSearch = () => {
+  // Hủy request hiện tại
+  if (searchController) {
+    searchController.abort();
+    searchController = null;
+  }
+
+  // Hủy debounce
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+    searchTimeout = null;
+  }
+
+  books.value = [];
+  searched.value = false;
+  loading.value = false;
+
+  currentPage.value = 1;
+  totalPages.value = 1;
+};
+
+// ===============================
+// SEARCH
+// ===============================
+
 const search = async (page = 1) => {
-  if (!keyword.value.trim()) {
-    alert("Vui lòng nhập tên sách hoặc tác giả.");
+  const value = keyword.value;
+
+
+  // ===============================
+  // QUAN TRỌNG:
+  // Không gọi API với keyword < 3 ký tự
+  // ===============================
+
+  if (value.length < 3) {
+    resetSearch();
     return;
   }
+
+  // Hủy request trước đó
+  if (searchController) {
+    searchController.abort();
+  }
+
+  const controller = new AbortController();
+
+  searchController = controller;
 
   loading.value = true;
 
   try {
-    const response = await searchBooks({
-      q: keyword.value.trim(),
-      page,
-    });
+    console.log("Keyword: ", value)
+    const response = await searchBooks(
+      {
+        q: value.trim(),
+        page,
+      },
+      {
+        signal: controller.signal,
+      }
+    );
+
+    // Request này không còn là request hiện tại
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    if (searchController !== controller) {
+      return;
+    }
+
+    // ===============================
+    // UPDATE RESULT
+    // ===============================
 
     books.value = response.data.books;
 
-    currentPage.value = response.data.pagination.page;
+    currentPage.value =
+      response.data.pagination.page;
 
     totalPages.value = Math.max(
       1,
@@ -52,14 +134,116 @@ const search = async (page = 1) => {
 
     searched.value = true;
   } catch (err) {
+    // Request bị AbortController hủy
+    if (
+      err.name === "AbortError" ||
+      err.code === "ERR_CANCELED"
+    ) {
+      return;
+    }
+
+    // Chỉ báo lỗi nếu đây vẫn là request hiện tại
+    if (searchController !== controller) {
+      return;
+    }
+
     alert(
       err.response?.data?.message ||
         "Không thể tìm kiếm sách."
     );
   } finally {
-    loading.value = false;
+    // Chỉ request hiện tại mới được phép
+    // thay đổi loading
+    if (searchController === controller) {
+      loading.value = false;
+    }
   }
 };
+
+// ===============================
+// INPUT SEARCH
+// ===============================
+
+const handleSearchInput = () => {
+  let searchId = 0;
+
+const search = async (page = 1) => {
+  const id = ++searchId;
+  const value = keyword.value;
+
+  console.log(
+    `[SEARCH ${id}] START:`,
+    JSON.stringify(value)
+  );
+
+  if (value.trim().length < 3) {
+    resetSearch();
+    return;
+  }
+
+  if (searchController) {
+    searchController.abort();
+  }
+
+  const controller = new AbortController();
+  searchController = controller;
+
+  loading.value = true;
+
+  try {
+    console.log(
+      `[SEARCH ${id}] BEFORE API:`,
+      JSON.stringify(value)
+    );
+
+    const response = await searchBooks(
+      {
+        q: value.trim(),
+        page,
+      },
+      {
+        signal: controller.signal,
+      }
+    );
+
+    if (controller.signal.aborted) {
+      console.log(`[SEARCH ${id}] ABORTED`);
+      return;
+    }
+
+    // ...
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    console.error(`[SEARCH ${id}] ERROR`, error);
+  } finally {
+    if (!controller.signal.aborted) {
+      loading.value = false;
+    }
+  }
+};
+
+};
+
+// ===============================
+// SUBMIT FORM
+// ===============================
+
+const handleSubmit = () => {
+  // Hủy debounce
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+    searchTimeout = null;
+  }
+
+  search(1);
+};
+
+// ===============================
+// BOOKSHELF
+// ===============================
 
 const loadBookshelf = async () => {
   try {
@@ -77,6 +261,10 @@ const loadBookshelf = async () => {
     );
   }
 };
+
+// ===============================
+// ADD BOOK MODAL
+// ===============================
 
 const openAddModal = (book) => {
   selectedBook.value = book;
@@ -117,9 +305,17 @@ const confirmAddBook = async () => {
   }
 };
 
+// ===============================
+// BOOK DETAIL
+// ===============================
+
 const openBookDetail = (book) => {
   router.push(`/books/${book.workId}`);
 };
+
+// ===============================
+// PAGINATION
+// ===============================
 
 const goToPage = (page) => {
   if (
@@ -154,8 +350,26 @@ const getPageNumbers = () => {
   return pages;
 };
 
-onMounted(loadBookshelf);
+
+// ===============================
+// LIFECYCLE
+// ===============================
+
+onMounted(() => {
+  loadBookshelf();
+});
+
+onBeforeUnmount(() => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+  }
+
+  if (searchController) {
+    searchController.abort();
+  }
+});
 </script>
+
 
 <template>
   <div class="search-page">
@@ -168,13 +382,14 @@ onMounted(loadBookshelf);
           thêm những cuốn bạn muốn đọc vào tủ sách.
         </p>
 
-        <form class="search-form" @submit.prevent="search(1)">
+        <form class="search-form" @submit.prevent="handleSubmit">
           <div class="search-input-wrapper">
             <input
               v-model="keyword"
               class="search-input"
               type="text"
-              placeholder="Nhập tên sách hoặc tác giả..."/>
+              placeholder="Nhập tên sách hoặc tác giả..."
+              @input="handleSearchInput"/>
           </div>
 
           <button class="search-button" type="submit" :disabled="loading">
