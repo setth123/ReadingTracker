@@ -1,18 +1,12 @@
+
 <script setup>
 import { onMounted, ref } from "vue";
-import {
-  getBookshelf,
-  updateBookshelfBook,
-  deleteBookshelfBook,
-} from "../services/bookshelf.service.js";
+import {getBookshelf, updateBookshelfBook, deleteBookshelfBook} from "../services/bookshelf.service.js";
 import { useRouter } from "vue-router";
 
 import "../assets/bookshelf.css";
 
-const router = useRouter();
-
 const books = ref([]);
-
 const statistics = ref({
   total: 0,
   wantToRead: 0,
@@ -42,6 +36,18 @@ const statusTabs = [
   },
 ];
 
+const getErrorMessage = (err, fallback) => {
+  if (!err.response) {
+    return "Không thể kết nối đến máy chủ. Vui lòng thử lại.";
+  }
+
+  if (err.response.status >= 500) {
+    return "Máy chủ đang gặp sự cố. Vui lòng thử lại sau.";
+  }
+
+  return err.response.data?.message || fallback;
+};
+
 const loadBookshelf = async () => {
   loading.value = true;
 
@@ -52,8 +58,10 @@ const loadBookshelf = async () => {
     statistics.value = response.data.statistics;
   } catch (err) {
     alert(
-      err.response?.data?.message ||
+      getErrorMessage(
+        err,
         "Không thể tải tủ sách. Vui lòng thử lại."
+      )
     );
   } finally {
     loading.value = false;
@@ -114,7 +122,9 @@ const updatePage = async (book, event) => {
     book.pageCount !== undefined &&
     currentPage > book.pageCount
   ) {
-    alert(`Số trang hiện tại không được vượt quá ${book.pageCount}.`);
+    alert(
+      `Số trang hiện tại không được vượt quá ${book.pageCount}.`
+    );
     event.target.value = book.currentPage;
     return;
   }
@@ -131,27 +141,33 @@ const updatePage = async (book, event) => {
 
     Object.assign(book, updatedBook);
 
+    // Backend có thể tự chuyển READING -> COMPLETED
+    // khi currentPage == pageCount.
     if (oldStatus !== updatedBook.status) {
       updateStatisticsAfterStatusChange(
         oldStatus,
         updatedBook.status
       );
-    }
 
-    if (
-      activeStatus.value !== "" &&
-      updatedBook.status !== activeStatus.value
-    ) {
-      books.value = books.value.filter(
-        (item) => item.id !== book.id
-      );
+      // Nếu đang xem một tab cụ thể và sách vừa chuyển
+      // sang status khác thì loại khỏi danh sách hiện tại.
+      if (
+        activeStatus.value !== "" &&
+        updatedBook.status !== activeStatus.value
+      ) {
+        books.value = books.value.filter(
+          (item) => item.id !== book.id
+        );
+      }
     }
   } catch (err) {
     event.target.value = oldPage;
 
     alert(
-      err.response?.data?.message ||
+      getErrorMessage(
+        err,
         "Không thể cập nhật số trang."
+      )
     );
   }
 };
@@ -173,6 +189,8 @@ const updateStatus = async (book, event) => {
 
     Object.assign(book, updatedBook);
 
+    // Dùng status thực tế từ backend thay vì newStatus,
+    // vì backend có thể áp dụng business rule khác.
     updateStatisticsAfterStatusChange(
       oldStatus,
       updatedBook.status
@@ -190,8 +208,10 @@ const updateStatus = async (book, event) => {
     event.target.value = oldStatus;
 
     alert(
-      err.response?.data?.message ||
+      getErrorMessage(
+        err,
         "Không thể cập nhật trạng thái."
+      )
     );
   }
 };
@@ -207,13 +227,17 @@ const updateRating = async (book, event) => {
       rating,
     });
 
-    Object.assign(book, response.data);
+    const updatedBook = response.data;
+
+    Object.assign(book, updatedBook);
   } catch (err) {
     event.target.value = oldRating || "";
 
     alert(
-      err.response?.data?.message ||
+      getErrorMessage(
+        err,
         "Không thể cập nhật đánh giá."
+      )
     );
   }
 };
@@ -227,13 +251,17 @@ const updateNote = async (book, event) => {
       note: note || null,
     });
 
-    Object.assign(book, response.data);
+    const updatedBook = response.data;
+
+    Object.assign(book, updatedBook);
   } catch (err) {
     event.target.value = oldNote || "";
 
     alert(
-      err.response?.data?.message ||
+      getErrorMessage(
+        err,
         "Không thể cập nhật ghi chú."
+      )
     );
   }
 };
@@ -257,11 +285,15 @@ const deleteBook = async (book) => {
     updateStatisticsAfterDelete(book);
   } catch (err) {
     alert(
-      err.response?.data?.message ||
+      getErrorMessage(
+        err,
         "Không thể xoá sách. Vui lòng thử lại."
+      )
     );
   }
 };
+
+const router = useRouter();
 
 const openBookDetail = (book) => {
   router.push(`/books/${book.workId}`);
@@ -387,31 +419,26 @@ onMounted(loadBookshelf);
       Chưa có sách trong mục này.
     </div>
 
-    <section
-      v-else
-      class="books-list"
-    >
+    <section v-else class="books-list">
       <article
         v-for="book in books"
         :key="book.id"
         class="bookshelf-card"
+        @click="openBookDetail(book)"
       >
-        <div class="book-cover" @click="openBookDetail(book)">
+        <div class="book-cover">
           <img
             v-if="book.coverUrl"
             :src="book.coverUrl"
             :alt="book.title"
           />
 
-          <div
-            v-else
-            class="no-cover"
-          >
+          <div v-else class="no-cover">
             No Cover
           </div>
         </div>
 
-        <div class="book-content" @click="openBookDetail(book)">
+        <div class="book-content">
           <h2>{{ book.title }}</h2>
 
           <p class="author">
@@ -433,12 +460,17 @@ onMounted(loadBookshelf);
           <div class="progress-bar">
             <div
               class="progress-value"
-              :style="{ width: `${getProgress(book)}%` }"
+              :style="{
+                width: `${getProgress(book)}%`,
+              }"
             ></div>
           </div>
 
-          <div class="book-actions">
-            <label @click.stop>
+          <div
+            class="book-actions"
+            @click.stop
+          >
+            <label>
               Trang hiện tại
 
               <input
@@ -451,7 +483,7 @@ onMounted(loadBookshelf);
               />
             </label>
 
-            <label @click.stop>
+            <label>
               Trạng thái
 
               <select
@@ -473,8 +505,11 @@ onMounted(loadBookshelf);
             </label>
           </div>
 
-          <div class="book-footer">
-            <label @click.stop>
+          <div
+            class="book-footer"
+            @click.stop
+          >
+            <label>
               Đánh giá
 
               <select
@@ -507,10 +542,7 @@ onMounted(loadBookshelf);
               </select>
             </label>
 
-            <label
-              class="note-field"
-              @click.stop
-            >
+            <label class="note-field">
               Ghi chú
 
               <input
@@ -524,7 +556,7 @@ onMounted(loadBookshelf);
 
             <button
               class="delete-button"
-              @click.stop="deleteBook(book)"
+              @click="deleteBook(book)"
             >
               Xoá
             </button>
@@ -534,3 +566,4 @@ onMounted(loadBookshelf);
     </section>
   </div>
 </template>
+```
