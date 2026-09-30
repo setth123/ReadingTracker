@@ -11,6 +11,9 @@ const searchCache = new Map();
 
 const SEARCH_CACHE_TTL = 5 * 60 * 1000;
 
+const authorCache = new Map();
+const AUTHOR_CACHE_TTL= 5 * 60 * 1000;
+
 export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
   const cacheKey = `${keyword.trim().toLowerCase()}:${page}:${limit}`;
 
@@ -77,6 +80,10 @@ export const getEditions = async (workId) => {
 };
 
 export const getAuthor = async (authorId) => {
+  const cached = authorCache.get(authorId);
+  if (cached && Date.now() - cached.timestamp < AUTHOR_CACHE_TTL) {
+    return cached.value;
+  }
 
   const url = `${OPEN_LIBRARY_URL}/authors/${authorId}.json`;
 
@@ -87,6 +94,8 @@ export const getAuthor = async (authorId) => {
   }
 
   const author = await response.json();
+  authorCache.set(authorId, { value: author, timestamp: Date.now() });
+
   return author;
 };
 
