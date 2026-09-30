@@ -28,6 +28,10 @@ export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
   url.searchParams.set("q", keyword);
   url.searchParams.set("page", page);
   url.searchParams.set("limit", limit);
+  url.searchParams.set(
+  "fields",
+  "numFound,key,title,author_name,cover_i,first_publish_year"
+);
 
   const response = await fetch(url);
 
