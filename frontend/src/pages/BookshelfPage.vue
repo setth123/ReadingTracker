@@ -1,6 +1,6 @@
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, ref, onBeforeUnmount } from "vue";
 import {getBookshelf, updateBookshelfBook, deleteBookshelfBook} from "../services/bookshelf.service.js";
 import { useRouter } from "vue-router";
 
