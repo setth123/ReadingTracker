@@ -468,20 +468,29 @@ onMounted(loadBookshelf);
     </div>
 
     <section v-else class="books-list">
-      <article
-        v-for="book in books"
-        :key="book.id"
-        class="bookshelf-card"
-        @click="openBookDetail(book)"
-      >
-        <div class="book-cover">
+      <article v-for="book in books" :key="book.id" class="bookshelf-card">
+        <div
+          class="book-cover clickable"
+          role="link"
+          tabindex="0"
+          @click="openBookDetail(book)"
+          @keydown.enter="openBookDetail(book)"
+        >
           <img v-if="book.coverUrl" :src="book.coverUrl" :alt="book.title" />
 
           <div v-else class="no-cover">No Cover</div>
         </div>
 
         <div class="book-content">
-          <h2>{{ book.title }}</h2>
+          <h2
+            class="book-title clickable"
+            role="link"
+            tabindex="0"
+            @click="openBookDetail(book)"
+            @keydown.enter="openBookDetail(book)"
+          >
+            {{ book.title }}
+          </h2>
 
           <p class="author">
             {{ book.author || "Unknown author" }}
@@ -585,3 +594,18 @@ onMounted(loadBookshelf);
     </section>
   </div>
 </template>
+
+<style scoped>
+/* Chỉ ảnh bìa và tên sách mới dẫn tới trang chi tiết */
+.bookshelf-card {
+  cursor: default;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.book-title.clickable:hover {
+  text-decoration: underline;
+}
+</style>
