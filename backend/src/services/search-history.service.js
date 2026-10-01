@@ -1,6 +1,6 @@
 // src/services/search-history.service.js
 
-const SEARCH_HISTORY_TTL = 24 * 60 * 60 * 1000;
+const SEARCH_HISTORY_TTL = 7 * 24 * 60 * 60 * 1000;
 const MAX_HISTORY_SIZE = 50;
 
 const searchHistory = new Map();
