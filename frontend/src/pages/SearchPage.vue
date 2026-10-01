@@ -122,7 +122,7 @@ const search = async (
 ) => {
   const value = keyword.value.trim();
   if(value<3){
-    alert("Từ khóa phải dài hơn 2 ký tự);
+    alert("Từ khóa phải dài hơn 2 ký tự");
     return;
   }
   loading.value = true;
