@@ -4,7 +4,7 @@
     q: z
       .string()
       .trim()
-      .min(3, "Keyword need to be longer than 3 characters")
+      .min(3, "Keyword need to be longer than 2 characters")
       .max(100, "Keyword is too long"),
 
     page: z.coerce
