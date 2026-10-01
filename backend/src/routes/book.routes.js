@@ -1,7 +1,7 @@
 import express from "express";
 
-import {searchBooks,getBookDetail} from "../controllers/book.controller.js";
-import {searchBooksSchema} from "../utils/validation.js";
+import {searchBooks,getBookDetail, getSearchHistorySuggestions} from "../controllers/book.controller.js";
+import {searchBooksSchema,searchHistoryQuerySchema} from "../utils/validation.js";
 import {validateQuery} from "../middelwares/validate.middleware.js";
 const router = express.Router();
 
@@ -10,8 +10,11 @@ router.get(
   validateQuery(searchBooksSchema),
   searchBooks
 );
- router.get(
-  "/:workId",  
-  getBookDetail
+router.get(
+  "/search/history",
+  validateQuery(searchHistoryQuerySchema),
+  getSearchHistorySuggestions
 );
+
+router.get("/:workId", getBookDetail);
 export default router;

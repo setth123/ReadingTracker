@@ -43,7 +43,7 @@ defineEmits(["add", "view"]);
         </span>
 
         <button :disabled="isAdded" @click="$emit('add', book)" class="book-add-button">
-          {{ isAdded ? "Đã thêm" : "Add to Shelf" }}
+          {{ isAdded ? "Đã thêm" : "Thêm vào tủ" }}
         </button>
       </div>
 

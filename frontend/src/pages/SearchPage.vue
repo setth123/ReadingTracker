@@ -1,19 +1,31 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount,watch } from "vue";
+import {
+  ref,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
 import { useRouter } from "vue-router";
 
 import BookCard from "../components/BookCard.vue";
-import { searchBooks } from "../services/book.service.js";
+
+import {
+  searchBooks,
+  getSearchHistory,
+} from "../services/book.service.js";
+
 import {
   getBookshelf,
   addToBookshelf,
 } from "../services/bookshelf.service.js";
 
+import {
+  searchKeyword,
+  searchPage,
+} from "../stores/appState.js"
+
 import "../assets/search.css";
 
 const router = useRouter();
-
-
 
 // ===============================
 // STATE
@@ -29,6 +41,9 @@ const searched = ref(false);
 const currentPage = ref(1);
 const totalPages = ref(1);
 
+const searchHistory = ref([]);
+const showSearchHistory = ref(false);
+
 const showAddModal = ref(false);
 const selectedBook = ref(null);
 const selectedStatus = ref("WANT_TO_READ");
@@ -37,29 +52,61 @@ const selectedStatus = ref("WANT_TO_READ");
 // SEARCH CONTROL
 // ===============================
 
-let searchTimeout = null;
-let searchController = null;
+let historyTimeout = null;
+
+// ===============================
+// SEARCH HISTORY
+// ===============================
+
+const loadSearchHistory = (value = "") => {
+  if (historyTimeout) {
+    clearTimeout(historyTimeout);
+  }
+
+  historyTimeout = setTimeout(async () => {
+    try {
+      const response = await getSearchHistory(value);
+
+      searchHistory.value = response.data.keywords;
+      showSearchHistory.value = true;
+    } catch (error) {
+      console.error(
+        "Failed to load search history:",
+        error
+      );
+    }
+  }, 500);
+};
+
+const handleSearchFocus = () => {
+  loadSearchHistory(keyword.value);
+};
+
+const handleSearchInput = (event) => {
+  keyword.value = event.target.value;
+
+  loadSearchHistory(keyword.value);
+};
+
+const handleSelectSearchHistory = async (
+  historyKeyword
+) => {
+  keyword.value = historyKeyword;
+
+  showSearchHistory.value = false;
+
+  searchPage.value = 1;
+
+  await search(1, false);
+};
 
 // ===============================
 // RESET SEARCH
 // ===============================
 
 const resetSearch = () => {
-  // Hủy request hiện tại
-  if (searchController) {
-    searchController.abort();
-    searchController = null;
-  }
-
-  // Hủy debounce
-  if (searchTimeout) {
-    clearTimeout(searchTimeout);
-    searchTimeout = null;
-  }
-
   books.value = [];
   searched.value = false;
-  loading.value = false;
 
   currentPage.value = 1;
   totalPages.value = 1;
@@ -69,55 +116,20 @@ const resetSearch = () => {
 // SEARCH
 // ===============================
 
-const search = async (page = 1) => {
-  const value = keyword.value;
-
-
-  // ===============================
-  // QUAN TRỌNG:
-  // Không gọi API với keyword < 3 ký tự
-  // ===============================
-
-  if (value.length < 3) {
-    resetSearch();
-    return;
-  }
-
-  // Hủy request trước đó
-  if (searchController) {
-    searchController.abort();
-  }
-
-  const controller = new AbortController();
-
-  searchController = controller;
+const search = async (
+  page = 1,
+  saveHistory = false
+) => {
+  const value = keyword.value.trim();
 
   loading.value = true;
+  showSearchHistory.value = false;
 
   try {
-    console.log("Keyword: ", value)
-    const response = await searchBooks(
-      {
-        q: value.trim(),
-        page,
-      },
-      {
-        signal: controller.signal,
-      }
-    );
-
-    // Request này không còn là request hiện tại
-    if (controller.signal.aborted) {
-      return;
-    }
-
-    if (searchController !== controller) {
-      return;
-    }
-
-    // ===============================
-    // UPDATE RESULT
-    // ===============================
+    const response = await searchBooks({
+      q: value,
+      page,
+    });
 
     books.value = response.data.books;
 
@@ -133,112 +145,46 @@ const search = async (page = 1) => {
     );
 
     searched.value = true;
-  } catch (err) {
-    // Request bị AbortController hủy
-    if (
-      err.name === "AbortError" ||
-      err.code === "ERR_CANCELED"
-    ) {
-      return;
-    }
 
-    // Chỉ báo lỗi nếu đây vẫn là request hiện tại
-    if (searchController !== controller) {
-      return;
-    }
+    // Lưu trạng thái tìm kiếm để giữ lại
+    // khi chuyển sang route khác.
+    searchKeyword.value = value;
+    searchPage.value = page;
 
+    // Backend đã lưu history khi search.
+    // Chỉ reload suggestion để UI có dữ liệu mới nhất.
+    if (saveHistory) {
+      const historyResponse =
+        await getSearchHistory();
+
+      searchHistory.value =
+        historyResponse.data.keywords;
+    }
+  } catch (error) {
     alert(
-      err.response?.data?.message ||
+      error.response?.data?.message ||
         "Không thể tìm kiếm sách."
     );
   } finally {
-    // Chỉ request hiện tại mới được phép
-    // thay đổi loading
-    if (searchController === controller) {
-      loading.value = false;
-    }
+    loading.value = false;
   }
 };
 
 // ===============================
-// INPUT SEARCH
+// SUBMIT SEARCH
 // ===============================
 
-const handleSearchInput = () => {
-  let searchId = 0;
-
-const search = async (page = 1) => {
-  const id = ++searchId;
-  const value = keyword.value;
-
-  console.log(
-    `[SEARCH ${id}] START:`,
-    JSON.stringify(value)
-  );
-
-  if (value.trim().length < 3) {
-    resetSearch();
-    return;
+const handleSubmit = async () => {
+  if (historyTimeout) {
+    clearTimeout(historyTimeout);
+    historyTimeout = null;
   }
 
-  if (searchController) {
-    searchController.abort();
-  }
+  const value = keyword.value.trim();
 
-  const controller = new AbortController();
-  searchController = controller;
+  searchPage.value = 1;
 
-  loading.value = true;
-
-  try {
-    console.log(
-      `[SEARCH ${id}] BEFORE API:`,
-      JSON.stringify(value)
-    );
-
-    const response = await searchBooks(
-      {
-        q: value.trim(),
-        page,
-      },
-      {
-        signal: controller.signal,
-      }
-    );
-
-    if (controller.signal.aborted) {
-      console.log(`[SEARCH ${id}] ABORTED`);
-      return;
-    }
-
-    // ...
-  } catch (error) {
-    if (controller.signal.aborted) {
-      return;
-    }
-
-    console.error(`[SEARCH ${id}] ERROR`, error);
-  } finally {
-    if (!controller.signal.aborted) {
-      loading.value = false;
-    }
-  }
-};
-
-};
-
-// ===============================
-// SUBMIT FORM
-// ===============================
-
-const handleSubmit = () => {
-  // Hủy debounce
-  if (searchTimeout) {
-    clearTimeout(searchTimeout);
-    searchTimeout = null;
-  }
-
-  search(1);
+  await search(1, true);
 };
 
 // ===============================
@@ -254,9 +200,9 @@ const loadBookshelf = async () => {
         (book) => book.workId
       )
     );
-  } catch (err) {
+  } catch (error) {
     alert(
-      err.response?.data?.message ||
+      error.response?.data?.message ||
         "Không thể tải tủ sách."
     );
   }
@@ -297,9 +243,9 @@ const confirmAddBook = async () => {
     );
 
     closeAddModal();
-  } catch (err) {
+  } catch (error) {
     alert(
-      err.response?.data?.message ||
+      error.response?.data?.message ||
         "Không thể thêm sách vào tủ."
     );
   }
@@ -317,7 +263,7 @@ const openBookDetail = (book) => {
 // PAGINATION
 // ===============================
 
-const goToPage = (page) => {
+const goToPage = async (page) => {
   if (
     page < 1 ||
     page > totalPages.value ||
@@ -327,7 +273,9 @@ const goToPage = (page) => {
     return;
   }
 
-  search(page);
+  searchPage.value = page;
+
+  await search(page, false);
 };
 
 const getPageNumbers = () => {
@@ -350,29 +298,52 @@ const getPageNumbers = () => {
   return pages;
 };
 
-
 // ===============================
 // LIFECYCLE
 // ===============================
 
-onMounted(() => {
-  loadBookshelf();
+onMounted(async () => {
+  await loadBookshelf();
+
+  // Load history để hiển thị khi focus vào input.
+  try {
+    const response = await getSearchHistory();
+
+    searchHistory.value =
+      response.data.keywords;
+  } catch (error) {
+    console.error(
+      "Failed to load search history:",
+      error
+    );
+  }
+
+  // Khôi phục search trước đó nếu user
+  // quay lại SearchPage từ route khác.
+  if (searchKeyword.value) {
+    keyword.value = searchKeyword.value;
+
+    await search(
+      searchPage.value || 1,
+      false
+    );
+  }
 });
 
 onBeforeUnmount(() => {
-  if (searchTimeout) {
-    clearTimeout(searchTimeout);
-  }
-
-  if (searchController) {
-    searchController.abort();
+  if (historyTimeout) {
+    clearTimeout(historyTimeout);
+    historyTimeout = null;
   }
 });
 </script>
 
-
 <template>
   <div class="search-page">
+    <!-- ===============================
+         SEARCH HERO
+    ================================ -->
+
     <section class="search-hero">
       <div class="search-hero-content">
         <h1>Tìm cuốn sách tiếp theo của bạn</h1>
@@ -382,22 +353,65 @@ onBeforeUnmount(() => {
           thêm những cuốn bạn muốn đọc vào tủ sách.
         </p>
 
-        <form class="search-form" @submit.prevent="handleSubmit">
+        <form
+          class="search-form"
+          @submit.prevent="handleSubmit"
+        >
           <div class="search-input-wrapper">
             <input
-              v-model="keyword"
+              :value="keyword"
               class="search-input"
               type="text"
               placeholder="Nhập tên sách hoặc tác giả..."
-              @input="handleSearchInput"/>
+              @input="handleSearchInput"
+              @focus="handleSearchFocus"
+            />
+
+            <!-- ===============================
+                 SEARCH HISTORY
+            ================================ -->
+
+            <div
+              v-if="
+                showSearchHistory &&
+                searchHistory.length > 0
+              "
+              class="search-history"
+            >
+              <button
+                v-for="historyKeyword in searchHistory"
+                :key="historyKeyword"
+                type="button"
+                class="search-history-item"
+                @mousedown.prevent="
+                  handleSelectSearchHistory(
+                    historyKeyword
+                  )
+                "
+              >
+                {{ historyKeyword }}
+              </button>
+            </div>
           </div>
 
-          <button class="search-button" type="submit" :disabled="loading">
-            {{ loading ? "Đang tìm..." : "Tìm kiếm" }}
+          <button
+            class="search-button"
+            type="submit"
+            :disabled="loading"
+          >
+            {{
+              loading
+                ? "Đang tìm..."
+                : "Tìm kiếm"
+            }}
           </button>
         </form>
       </div>
     </section>
+
+    <!-- ===============================
+         LOADING
+    ================================ -->
 
     <template v-if="loading">
       <div class="search-state">
@@ -415,7 +429,16 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <template v-else-if="searched && books.length === 0">
+    <!-- ===============================
+         EMPTY RESULT
+    ================================ -->
+
+    <template
+      v-else-if="
+        searched &&
+        books.length === 0
+      "
+    >
       <div class="search-state">
         <div class="search-state-icon">
           🔍
@@ -431,12 +454,19 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <template v-else-if="books.length > 0">
+    <!-- ===============================
+         SEARCH RESULTS
+    ================================ -->
+
+    <template
+      v-else-if="books.length > 0"
+    >
       <div class="search-result-header">
         <h2>Kết quả tìm kiếm</h2>
 
         <span class="search-result-count">
-          Trang {{ currentPage }} / {{ totalPages }}
+          Trang {{ currentPage }} /
+          {{ totalPages }}
         </span>
       </div>
 
@@ -445,19 +475,33 @@ onBeforeUnmount(() => {
           v-for="book in books"
           :key="book.workId"
           :book="book"
-          :is-added="bookshelfWorkIds.has(book.workId)"
+          :is-added="
+            bookshelfWorkIds.has(
+              book.workId
+            )
+          "
           @add="openAddModal"
-          @view="openBookDetail"/>
+          @view="openBookDetail"
+        />
       </section>
+
+      <!-- ===============================
+           PAGINATION
+      ================================ -->
 
       <nav
         v-if="totalPages > 1"
-        class="pagination">
+        class="pagination"
+      >
         <button
           :disabled="
-            currentPage === 1 || loading
+            currentPage === 1 ||
+            loading
           "
-          @click="goToPage(currentPage - 1)">
+          @click="
+            goToPage(currentPage - 1)
+          "
+        >
           ←
         </button>
 
@@ -465,10 +509,12 @@ onBeforeUnmount(() => {
           v-for="page in getPageNumbers()"
           :key="page"
           :class="{
-            active: currentPage === page,
+            active:
+              currentPage === page,
           }"
           :disabled="loading"
-          @click="goToPage(page)">
+          @click="goToPage(page)"
+        >
           {{ page }}
         </button>
 
@@ -477,13 +523,23 @@ onBeforeUnmount(() => {
             currentPage === totalPages ||
             loading
           "
-          @click="goToPage(currentPage + 1)">
+          @click="
+            goToPage(currentPage + 1)
+          "
+        >
           →
         </button>
       </nav>
     </template>
 
-    <div v-else class="search-state">
+    <!-- ===============================
+         INITIAL STATE
+    ================================ -->
+
+    <div
+      v-else
+      class="search-state"
+    >
       <div class="search-state-icon">
         📚
       </div>
@@ -497,12 +553,15 @@ onBeforeUnmount(() => {
       </p>
     </div>
 
-    <!-- Add to bookshelf modal -->
+    <!-- ===============================
+         ADD TO BOOKSHELF MODAL
+    ================================ -->
+
     <div
       v-if="showAddModal"
       class="add-book-overlay"
-      @click.self="closeAddModal">
-      
+      @click.self="closeAddModal"
+    >
       <div class="add-book-modal">
         <h2>Thêm vào tủ sách</h2>
 
@@ -515,6 +574,7 @@ onBeforeUnmount(() => {
 
         <div class="status-options">
           <button
+            type="button"
             class="status-option"
             :class="{
               selected:
@@ -522,15 +582,19 @@ onBeforeUnmount(() => {
                 'WANT_TO_READ',
             }"
             @click="
-              selectedStatus = 'WANT_TO_READ'
-            ">
+              selectedStatus =
+                'WANT_TO_READ'
+            "
+          >
             <strong>Muốn đọc</strong>
+
             <span>
               Lưu lại để đọc sau
             </span>
           </button>
 
           <button
+            type="button"
             class="status-option"
             :class="{
               selected:
@@ -542,12 +606,14 @@ onBeforeUnmount(() => {
             "
           >
             <strong>Đang đọc</strong>
+
             <span>
               Bắt đầu theo dõi tiến độ đọc
             </span>
           </button>
 
           <button
+            type="button"
             class="status-option"
             :class="{
               selected:
@@ -555,10 +621,12 @@ onBeforeUnmount(() => {
                 'COMPLETED',
             }"
             @click="
-              selectedStatus = 'COMPLETED'
+              selectedStatus =
+                'COMPLETED'
             "
           >
             <strong>Đã đọc</strong>
+
             <span>
               Đánh dấu là đã hoàn thành
             </span>
@@ -567,6 +635,7 @@ onBeforeUnmount(() => {
 
         <div class="modal-actions">
           <button
+            type="button"
             class="btn btn-secondary"
             @click="closeAddModal"
           >
@@ -574,6 +643,7 @@ onBeforeUnmount(() => {
           </button>
 
           <button
+            type="button"
             class="btn btn-primary"
             @click="confirmAddBook"
           >

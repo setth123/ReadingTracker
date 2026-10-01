@@ -13,3 +13,11 @@ export const getBookDetail = async (workId) => {
 
   return response.data;
 };
+
+export const getSearchHistory = async (keyword = "") => {
+  const response = await api.get("/books/search/history", {
+    params: keyword ? { q: keyword } : {},
+  });
+
+  return response.data;
+};

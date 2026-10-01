@@ -1,10 +1,12 @@
 import {searchPaginatedBooks, getBookDetailData} from "../services/openlibrary.service.js";
+import {saveSearchHistory, getSearchHistory} from "../services/search-history.service.js";
 import {mapSearchBook, mapWorkBook} from "../utils/book.mapper.js";
 import { successResponse } from "../utils/response.js";
 
 export const searchBooks = async (req, res, next) => {
   try {
     const { q, page } = req.validateQuery;
+    saveSearchHistory(q);
 
     const result = await searchPaginatedBooks(
       q,
@@ -39,3 +41,16 @@ export const getBookDetail = async (req, res, next) => {
   }
 };
 
+export const getSearchHistorySuggestions = async (req, res, next) => {
+  try {
+    const { q = "" } = req.validateQuery;
+
+    const keywords = getSearchHistory(q);
+
+    return successResponse(res, {
+      keywords,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

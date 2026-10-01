@@ -564,3 +564,67 @@
     flex-wrap: wrap;
   }
 }
+
+/* ===============================
+   SEARCH HISTORY DROPDOWN
+================================ */
+
+.search-input-wrapper {
+  position: relative;
+}
+
+.search-history {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+
+  display: flex;
+  flex-direction: column;
+
+  padding: 6px;
+
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+
+  box-shadow:
+    0 10px 25px rgba(15, 23, 42, 0.08),
+    0 4px 10px rgba(15, 23, 42, 0.04);
+}
+
+.search-history-item {
+  display: flex;
+  align-items: center;
+
+  width: 100%;
+  min-height: 42px;
+
+  padding: 10px 12px;
+
+  border: none;
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.search-history-item:hover {
+  background: #f8fafc;
+  color: #15803d;
+}
+
+.search-history-item:active {
+  background: #dcfce7;
+}
