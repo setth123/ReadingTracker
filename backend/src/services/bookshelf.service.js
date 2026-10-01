@@ -131,7 +131,7 @@ export const createBookShelf = async ({ workId, status }) => {
     return book;
   }
   catch(error){
-    if(error.code="P2002"){
+    if(error.code === "P2002"){
       throw new AppError(
         "Sách đã tồn tại trong giá sách",
         409
