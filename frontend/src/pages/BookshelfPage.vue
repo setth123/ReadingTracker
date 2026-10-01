@@ -17,6 +17,8 @@ const statistics = ref({
 const activeStatus = ref("");
 const loading = ref(false);
 
+const pageUpdateTimers = new Map();
+
 const statusTabs = [
   {
     value: "",
@@ -99,7 +101,7 @@ const formatDate = (date) => {
     }).format(new Date(date));
   };
 
-const updatePage = async (book, event) => {
+const updatePage = (book, event) => {
   const value = event.target.value.trim();
 
   if (value === "") {
@@ -140,49 +142,51 @@ const updatePage = async (book, event) => {
     return;
   }
 
-  const oldPage = book.currentPage;
-  const oldStatus = book.status;
-  
+  // Lấy timer cũ của book này
+  const oldTimer = pageUpdateTimers.get(book.id);
 
-  try {
-    const response = await updateBookshelfBook(book.id, {
-      currentPage,
-    });
+  // Nếu đang có timer thì huỷ
+  if (oldTimer) {
+    clearTimeout(oldTimer);
+  }
 
-    const updatedBook = response.data;
+  // Cập nhật UI ngay lập tức
+  book.currentPage = currentPage;
 
-    Object.assign(book, updatedBook);
+  // Tạo timer mới
+  const timer = setTimeout(async () => {
+    try {
+      const response = await updateBookshelfBook(book.id, {
+        currentPage,
+      });
 
-    // Backend có thể tự chuyển READING -> COMPLETED
-    // khi currentPage == pageCount.
-    if (oldStatus !== updatedBook.status) {
-      updateStatisticsAfterStatusChange(
-        oldStatus,
-        updatedBook.status
-      );
+      const updatedBook = response.data;
 
-      // Nếu đang xem một tab cụ thể và sách vừa chuyển
-      // sang status khác thì loại khỏi danh sách hiện tại.
-      if (
-        activeStatus.value !== "" &&
-        updatedBook.status !== activeStatus.value
-      ) {
-        books.value = books.value.filter(
-          (item) => item.id !== book.id
+      Object.assign(book, updatedBook);
+
+    } catch (err) {
+      // Nếu API lỗi thì trả UI về giá trị backend cũ
+      try {
+        const response = await getBookshelf(activeStatus.value);
+
+        books.value = response.data.books;
+        statistics.value = response.data.statistics;
+      } catch {
+        alert(
+          getErrorMessage(
+            err,
+            "Không thể cập nhật số trang."
+          )
         );
       }
+    } finally {
+      pageUpdateTimers.delete(book.id);
     }
-  } catch (err) {
-    event.target.value = oldPage;
+  }, 400);
 
-    alert(
-      getErrorMessage(
-        err,
-        "Không thể cập nhật số trang."
-      )
-    );
-  }
+  pageUpdateTimers.set(book.id, timer);
 };
+
 
 const updateStatus = async (book, event) => {
   const newStatus = event.target.value;
@@ -370,7 +374,14 @@ const updateStatisticsAfterDelete = (book) => {
 
   statistics.value = stats;
 };
+  
+onBeforeUnmount(() => {
+  for (const timer of pageUpdateTimers.values()) {
+    clearTimeout(timer);
+  }
 
+  pageUpdateTimers.clear();
+});
 onMounted(loadBookshelf);
 </script>
 
@@ -508,8 +519,9 @@ onMounted(loadBookshelf);
                 min="0"
                 :max="book.pageCount || undefined"
                 :value="book.currentPage"
-                @change="updatePage(book, $event)"
+                @input="updatePage(book, $event)"
               />
+
             </label>
 
             <label>
