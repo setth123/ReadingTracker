@@ -186,26 +186,50 @@ const removeIfNotInActiveTab = (book) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Cập nhật số trang (debounce, không alert khi đang gõ)                      */
+/* Cập nhật số trang (debounce, chỉ báo lỗi khi rời ô nhập)                   */
 /* -------------------------------------------------------------------------- */
 
-const updatePage = (book, event) => {
-  const input = event.target;
-  const value = input.value.trim();
+/**
+ * Kiểm tra giá trị trong ô nhập số trang.
+ * Trả về { valid: true, value } hoặc { valid: false, message }.
+ */
+const validatePageInput = (book, input) => {
+  const raw = input.value.trim();
 
-  // Đang gõ dở (xoá trống, ký tự lạ): không làm gì, chờ người dùng gõ tiếp.
-  // Khi rời ô (blur) sẽ được chuẩn hoá về giá trị hợp lệ gần nhất.
-  if (value === "" || !/^\d+$/.test(value)) {
+  // type="number" trả về "" khi nhập ký tự không hợp lệ (vd: "e", "1e")
+  if (raw === "" || input.validity.badInput) {
+    return { valid: false, message: "Vui lòng nhập số trang hợp lệ." };
+  }
+
+  if (!/^\d+$/.test(raw)) {
+    return {
+      valid: false,
+      message: "Số trang phải là số nguyên không âm.",
+    };
+  }
+
+  const value = Number(raw);
+
+  if (book.pageCount && value > book.pageCount) {
+    return {
+      valid: false,
+      message: `Số trang không được vượt quá ${book.pageCount}.`,
+    };
+  }
+
+  return { valid: true, value };
+};
+
+const updatePage = (book, event) => {
+  const result = validatePageInput(book, event.target);
+
+  // Đang gõ sai: không alert, không gửi request.
+  // Lỗi sẽ được báo khi người dùng rời ô nhập (blur).
+  if (!result.valid) {
     return;
   }
 
-  let currentPage = Number(value);
-
-  // Vượt quá số trang tối đa: tự cắt về max thay vì alert
-  if (book.pageCount && currentPage > book.pageCount) {
-    currentPage = book.pageCount;
-    input.value = currentPage;
-  }
+  const currentPage = result.value;
 
   // Cập nhật UI ngay lập tức (progress bar chạy mượt)
   book.currentPage = currentPage;
@@ -234,8 +258,6 @@ const updatePage = (book, event) => {
       const oldStatus = book.status;
       const updatedBook = response.data;
 
-      // Chỉ lấy các trường backend có thể tự thay đổi (status, startedAt, ...)
-      // currentPage lấy từ server vì đã là lần gõ cuối cùng.
       applyServerBook(book, updatedBook);
 
       if (oldStatus !== updatedBook.status) {
@@ -263,9 +285,23 @@ const updatePage = (book, event) => {
   pageUpdateTimers.set(book.id, timer);
 };
 
-/** Khi rời ô nhập: nếu ô trống/không hợp lệ thì trả về số trang hiện tại */
+/**
+ * Khi rời ô nhập: nếu giá trị sai thì báo lỗi một lần,
+ * rồi trả ô nhập về số trang hợp lệ gần nhất.
+ */
 const normalizePageInput = (book, event) => {
-  event.target.value = book.currentPage;
+  const input = event.target;
+  const result = validatePageInput(book, input);
+
+  if (result.valid) {
+    input.value = result.value;
+    return;
+  }
+
+  // Trả giá trị về trước, rồi mới alert
+  input.value = book.currentPage;
+
+  alert(result.message);
 };
 
 /* -------------------------------------------------------------------------- */
