@@ -54,13 +54,16 @@ const loadBook = async () => {
   try {
     const response = await getBookDetail(route.params.workId);
 
-    book.value = response.data;
+    book.value = {
+      ...book.value,
+      ...response.data,
+    };
+
     isAdded.value = response.data.isAdded;
   } catch (err) {
-    alert(
+    error.value =
       err.response?.data?.message ||
-        "Không thể tải thông tin sách."
-    );
+      "Không thể tải thông tin sách.";
   } finally {
     loading.value = false;
     loadingDetail.value = false;
