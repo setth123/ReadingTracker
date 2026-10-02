@@ -48,8 +48,8 @@ export const extractDescription = (description) => {
 
 export const getWorkCoverId = (work) => work.covers?.find((id) => id > 0) || null;
 
-export const mapWorkBook = (work,authors,pageCount=null,searchCoverId=null) => {
-  // Prefer the search cover so detail shows the same image as the search page
+export const mapWorkBook = (work, { authors = [], pageCount = null, coverId: searchCoverId = null, publishedYear: searchYear = null } = {}) => {
+  // Prefer search data so detail shows the same cover and year as the search page
   const coverId = searchCoverId || getWorkCoverId(work);
 
   return {
@@ -65,9 +65,9 @@ export const mapWorkBook = (work,authors,pageCount=null,searchCoverId=null) => {
 
     subjects: work.subjects || [],
 
-    publishedYear: work.first_publish_date
+    publishedYear: searchYear || (work.first_publish_date
       ? Number(work.first_publish_date.match(/\d{4}/)?.[0]) || null
-      : null,
+      : null),
 
     coverId,
     coverUrl: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : null,
