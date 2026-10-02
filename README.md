@@ -14,11 +14,9 @@ Dữ liệu sách được lấy từ **Open Library API** thông qua Backend. D
 
 ### Ảnh chụp màn hình
 
-> Có thể bổ sung ảnh chụp màn hình thực tế vào thư mục `docs/screenshots/`.
-
-* `docs/screenshots/search.png` - Màn hình tìm kiếm sách
-* `docs/screenshots/book-detail.png` - Màn hình chi tiết sách
-* `docs/screenshots/bookshelf.png` - Màn hình tủ sách
+* `docs/Screenshot From 2026-10-02 14-34-32.png` - Màn hình tìm kiếm sách
+* `docs/Screenshot From 2026-10-02 14-35-34.png` - Màn hình chi tiết sách
+* `docs/Screenshot From 2026-10-02 14-35-46.png` - Màn hình tủ sách
 
 ---
 
@@ -395,8 +393,8 @@ Một số lỗi nghiệp vụ được xử lý riêng, ví dụ:
 ### Clone project
 
 ```bash
-git clone <repository-url>
-cd mini-reading-tracker
+git clone https://github.com/setth123/ReadingTracker.git
+cd ReadingTracker
 ```
 
 ---
@@ -649,18 +647,18 @@ Nếu có thêm thời gian, có thể phát triển thêm:
 ### Frontend
 
 ```text
-<Frontend URL>
+https://readingtracker-frontend.vercel.app/
 ```
 
 ### Backend
 
 ```text
-<Backend URL>
+https://reading-tracker-api-lbf6.onrender.com
 ```
 
 ### Repository
 
 ```text
-<GitHub Repository URL>
+https://github.com/setth123/ReadingTracker.git
 ```
 
