@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 
 import {getBookDetail} from "../services/book.service.js";
 
-import {getBookshelf,addToBookshelf,} from "../services/bookshelf.service.js";
+import {addToBookshelf} from "../services/bookshelf.service.js";
 
 import "../assets/book-detail.css";
 
@@ -25,14 +25,12 @@ const loadBook = async () => {
   error.value = "";
 
   try {
-    const [bookResponse, bookshelfResponse] = await Promise.all([
-      getBookDetail(route.params.workId),
-      getBookshelf(),
-    ]);
-    book.value = bookResponse.data;
+    const response = await getBookDetail(route.params.workId);
+    const coverUrl = route.query.coverUrl;
 
-    const bookshelf = bookshelfResponse.data.books || [];
-    isAdded.value = bookshelf.some((item) => item.workId === route.params.workId);
+    // Ưu tiên ảnh từ màn search (search và work của Open Library có thể khác cover)
+    book.value = coverUrl ? { ...response.data, coverUrl } : response.data;
+    isAdded.value = response.data.isAdded;
   } catch (err) {
     alert(
       err.response?.data?.message ||
