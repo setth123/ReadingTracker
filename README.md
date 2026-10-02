@@ -408,7 +408,7 @@ Một số lỗi nghiệp vụ được xử lý riêng, ví dụ:
 
 ```bash
 git clone https://github.com/setth123/ReadingTracker.git
-cd ReadingTracker
+cd ReadingTracker-main
 ```
 
 ---
