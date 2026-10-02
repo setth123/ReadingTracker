@@ -39,13 +39,18 @@ defineEmits(["add", "view"]);
 
       <div class="book-card-footer">
         <span v-if="isAdded" class="book-added-badge">
-          ✓ Đã thêm
+         ✓ Đã thêm vào tủ
         </span>
 
-        <button :disabled="isAdded" @click="$emit('add', book)" class="book-add-button">
-          {{ isAdded ? "Đã thêm" : "Thêm vào tủ" }}
-        </button>
+        <button
+          v-else
+          class="book-add-button"
+          @click="$emit('add', book)"
+       >
+        Thêm vào tủ
+       </button>
       </div>
+   
 
     </div>
 
