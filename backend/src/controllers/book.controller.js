@@ -33,7 +33,13 @@ export const getBookDetail = async (req, res, next) => {
   try {
     const { workId } = req.params;
 
-    const book = await getBookDetailData(workId);
+    const [book, bookshelfItem] = await Promise.all([
+      getBookDetailData(workId),
+      prisma.bookshelf.findUnique({ where: { workId }, select: { id: true } }),
+    ]);
+
+    return successResponse(res, { ...book, isAdded: Boolean(bookshelfItem) });
+
 
     return successResponse(res, book);
   } catch (error) {
