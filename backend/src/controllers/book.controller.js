@@ -1,6 +1,7 @@
 import {searchPaginatedBooks, getBookDetailData} from "../services/openlibrary.service.js";
 import {saveSearchHistory, getSearchHistory} from "../services/search-history.service.js";
-import {mapSearchBook, mapWorkBook} from "../utils/book.mapper.js";
+import {mapSearchBook} from "../utils/book.mapper.js";
+import prisma from "../utils/prisma.js";
 import { successResponse } from "../utils/response.js";
 
 export const searchBooks = async (req, res, next) => {
@@ -39,9 +40,6 @@ export const getBookDetail = async (req, res, next) => {
     ]);
 
     return successResponse(res, { ...book, isAdded: Boolean(bookshelfItem) });
-
-
-    return successResponse(res, book);
   } catch (error) {
     next(error);
   }

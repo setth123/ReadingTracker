@@ -11,9 +11,6 @@ const searchCache = new Map();
 
 const SEARCH_CACHE_TTL = 5 * 60 * 1000;
 
-const authorCache = new Map();
-const AUTHOR_CACHE_TTL= 5 * 60 * 1000;
-
 export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
   const cacheKey = `${keyword.trim().toLowerCase()}:${page}:${limit}`;
 
@@ -71,51 +68,29 @@ export const getWork = async (workId) => {
   return response.json();
 };
 
-export const getEditions = async (workId) => {
-  const url = `${OPEN_LIBRARY_URL}/works/${workId}/editions.json?limit=20`;
+// One search request gives the same cover as the search page, a page count and author names,
+// which is much faster than fetching editions.json plus every author separately
+export const getWorkSearchData = async (workId) => {
+  const url = new URL(`${OPEN_LIBRARY_URL}/search.json`);
+
+  url.searchParams.set("q", `key:/works/${workId}`);
+  url.searchParams.set("fields", "cover_i,number_of_pages_median,author_name");
+  url.searchParams.set("limit", 1);
 
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new AppError("Failed to fetch book editions from Open Library", 502);
+    throw new AppError("Failed to fetch book from Open Library", 502);
   }
 
-  return response.json();
-};
+  const data = await response.json();
+  const doc = data.docs?.[0] || {};
 
-export const getAuthor = async (authorId) => {
-  const cached = authorCache.get(authorId);
-  if (cached && Date.now() - cached.timestamp < AUTHOR_CACHE_TTL) {
-    return cached.value;
-  }
-
-  const url = `${OPEN_LIBRARY_URL}/authors/${authorId}.json`;
-
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new AppError("Failed to fetch author from Open Library");
-  }
-
-  const author = await response.json();
-  authorCache.set(authorId, { value: author, timestamp: Date.now() });
-
-  return author;
-};
-
-export const getPageCount = async (workId) => {
-
-  const editions = await getEditions(workId);
-
-  const edition = editions.entries?.find(
-    (item) =>
-      Number.isInteger(item.number_of_pages) &&
-      item.number_of_pages > 0
-  );
-
-  const pageCount = edition?.number_of_pages || null;
-
-  return pageCount;
+  return {
+    coverId: doc.cover_i || null,
+    pageCount: doc.number_of_pages_median || null,
+    authors: doc.author_name || [],
+  };
 };
 
 export const getBookDetailData = async (workId) => {
@@ -125,30 +100,12 @@ export const getBookDetailData = async (workId) => {
     return cached.value;
   }
 
-  const [work, pageCount] = await Promise.all([
+  const [work, { pageCount, coverId, authors }] = await Promise.all([
     getWork(workId),
-    getPageCount(workId),
+    getWorkSearchData(workId),
   ]);
 
-  const authors = await Promise.all(
-    (work.authors || []).map(async (author) => {
-      const authorId = author.author?.key?.replace("/authors/", "");
-
-      if (!authorId) {
-        return null;
-      }
-
-      const authorData = await getAuthor(authorId);
-
-      return authorData.name || null;
-    })
-  );
-
-  const book = mapWorkBook(
-    work,
-    authors.filter(Boolean),
-    pageCount
-  );
+  const book = mapWorkBook(work, authors, pageCount, coverId);
 
   bookDetailCache.set(workId, {
     value: book,

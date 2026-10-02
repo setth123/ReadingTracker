@@ -1,5 +1,5 @@
 import prisma from "../utils/prisma.js";
-import {getPageCount,getWork, getAuthor} from "../services/openlibrary.service.js";
+import {getBookDetailData} from "../services/openlibrary.service.js";
 import AppError from "../utils/AppError.js";
 import { mapBookshelfBook } from "../utils/book.mapper.js";
 
@@ -55,49 +55,20 @@ export const createBookShelf = async ({ workId, status }) => {
     );
   }
 
-  const work = await getWork(workId);
-
-  const pageCount = await getPageCount(workId);
-
-  const title = work.title || "Unknown title";
-
-  const authorKeys = (work.authors || [])
-    .map((item) => item.author?.key)
-    .filter(Boolean);
-
-  let authors = [];
-
-  if (authorKeys.length > 0) {
-    authors = await Promise.all(
-      authorKeys.map(async (key) => {
-        const authorId = key.replace("/authors/", "");
-
-        try {
-          const author = await getAuthor(authorId);
-
-          return author.name || "Unknown author";
-        } catch {
-          return "Unknown author";
-        }
-      })
-    );
-  }
+  // Reuses the detail cache, so adding right after viewing the detail page is instant
+  const {
+    title,
+    authors,
+    coverId,
+    description,
+    pageCount,
+    publishedYear,
+    subjects,
+  } = await getBookDetailData(workId);
 
   const author = authors.length > 0
     ? authors.join(", ")
     : null;
-
-  const description =
-    typeof work.description === "string"
-      ? work.description
-      : work.description?.value || null;
-
-  const publishedYear = work.first_publish_date
-    ? Number(
-        work.first_publish_date.match(/\d{4}/)?.[0]
-      ) || null
-    : null;
-  
 
   const isCompleted = status === "COMPLETED";
 
@@ -112,11 +83,11 @@ export const createBookShelf = async ({ workId, status }) => {
         workId,
         title,
         author,
-        coverId: work.covers?.[0] || null,
+        coverId,
         description,
         pageCount,
         publishedYear,
-        subjects: work.subjects || [],
+        subjects,
         status,
         currentPage,
         startedAt: status === "READING" || isCompleted
@@ -155,7 +126,7 @@ export const updateBookShelf = async (id, data) => {
 
   if (book.pageCount !== null && currentPage > book.pageCount) {
     throw new AppError(
-      `Số trang hiện tại không được vượt quá 300. (${book.pageCount})`,
+      `Số trang hiện tại không được vượt quá ${book.pageCount}`,
       400
     );
   }

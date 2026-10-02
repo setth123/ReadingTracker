@@ -259,7 +259,19 @@ const confirmAddBook = async () => {
 // ===============================
 
 const openBookDetail = (book) => {
-  router.push(`/books/${book.workId}`);
+  router.push({
+    path: `/books/${book.workId}`,
+    // Lets the detail page render what search already knows while the rest loads
+    state: {
+      preview: {
+        workId: book.workId,
+        title: book.title,
+        author: book.author,
+        coverUrl: book.coverUrl,
+        publishedYear: book.publishedYear,
+      },
+    },
+  });
 };
 
 // ===============================

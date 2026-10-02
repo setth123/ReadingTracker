@@ -20,16 +20,41 @@ const showAddModal = ref(false);
 const selectedStatus = ref("WANT_TO_READ");
 const adding = ref(false);
 
+// Dữ liệu sơ bộ truyền từ màn search, chỉ có khi mở từ kết quả tìm kiếm
+const getPreview = () => {
+  const preview = window.history.state?.preview;
+
+  if (preview?.workId !== route.params.workId) {
+    return null;
+  }
+
+  return {
+    ...preview,
+    authors: preview.author ? [preview.author] : [],
+  };
+};
+
+// true khi đang hiển thị preview và chờ dữ liệu đầy đủ
+const loadingDetail = ref(false);
+
 const loadBook = async () => {
-  loading.value = true;
   error.value = "";
+
+  const preview = getPreview();
+
+  if (preview) {
+    book.value = preview;
+    loading.value = false;
+  } else {
+    loading.value = true;
+  }
+
+  loadingDetail.value = true;
 
   try {
     const response = await getBookDetail(route.params.workId);
-    const coverUrl = route.query.coverUrl;
 
-    // Ưu tiên ảnh từ màn search (search và work của Open Library có thể khác cover)
-    book.value = coverUrl ? { ...response.data, coverUrl } : response.data;
+    book.value = response.data;
     isAdded.value = response.data.isAdded;
   } catch (err) {
     alert(
@@ -38,11 +63,12 @@ const loadBook = async () => {
     );
   } finally {
     loading.value = false;
+    loadingDetail.value = false;
   }
 };
 
 const openAddModal = () => {
-  if (isAdded.value) {
+  if (isAdded.value || loadingDetail.value) {
     return;
   }
 
@@ -180,19 +206,32 @@ onMounted(async () => {
             </div>
 
             <div
-              v-if="book.pageCount"
+              v-if="book.pageCount || loadingDetail"
               class="meta-item"
             >
               <span class="meta-label">Số trang</span>
-              <strong>{{ book.pageCount }}</strong>
+              <strong v-if="book.pageCount">{{ book.pageCount }}</strong>
+              <span
+                v-else
+                class="skeleton skeleton-meta"
+              ></span>
             </div>
           </div>
 
           <div class="detail-section">
             <h2>Mô tả</h2>
 
+            <div
+              v-if="loadingDetail"
+              class="skeleton-lines"
+            >
+              <span class="skeleton"></span>
+              <span class="skeleton"></span>
+              <span class="skeleton"></span>
+            </div>
+
             <p
-              v-if="book.description"
+              v-else-if="book.description"
               class="description"
             >
               {{ book.description }}
@@ -227,6 +266,7 @@ onMounted(async () => {
             <button
               v-if="!isAdded"
               class="btn btn-primary detail-add-button"
+              :disabled="loadingDetail"
               @click="openAddModal"
             >
               <span>＋</span>
