@@ -74,7 +74,7 @@ export const getWorkSearchData = async (workId) => {
   const url = new URL(`${OPEN_LIBRARY_URL}/search.json`);
 
   url.searchParams.set("q", `key:/works/${workId}`);
-  url.searchParams.set("fields", "cover_i,number_of_pages_median,author_name");
+  url.searchParams.set("fields", "cover_i,number_of_pages_median,author_name,first_publish_year");
   url.searchParams.set("limit", 1);
 
   const response = await fetch(url);
@@ -90,6 +90,7 @@ export const getWorkSearchData = async (workId) => {
     coverId: doc.cover_i || null,
     pageCount: doc.number_of_pages_median || null,
     authors: doc.author_name || [],
+    publishedYear: doc.first_publish_year || null,
   };
 };
 
@@ -100,12 +101,12 @@ export const getBookDetailData = async (workId) => {
     return cached.value;
   }
 
-  const [work, { pageCount, coverId, authors }] = await Promise.all([
+  const [work, searchData] = await Promise.all([
     getWork(workId),
     getWorkSearchData(workId),
   ]);
 
-  const book = mapWorkBook(work, authors, pageCount, coverId);
+  const book = mapWorkBook(work, searchData);
 
   bookDetailCache.set(workId, {
     value: book,
