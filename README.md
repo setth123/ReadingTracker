@@ -14,9 +14,23 @@ Dữ liệu sách được lấy từ **Open Library API** thông qua Backend. D
 
 ### Ảnh chụp màn hình
 
-* `docs/Screenshot From 2026-10-02 14-34-32.png` - Màn hình tìm kiếm sách
-* `docs/Screenshot From 2026-10-02 14-35-34.png` - Màn hình chi tiết sách
-* `docs/Screenshot From 2026-10-02 14-35-46.png` - Màn hình tủ sách
+#### Tìm kiếm sách
+
+<p align="center">
+  <img src="./docs/Screenshot%20From%202026-10-02%2014-34-32.png" width="90%" alt="Màn hình tìm kiếm sách">
+</p>
+
+#### Chi tiết sách
+
+<p align="center">
+  <img src="./docs/Screenshot%20From%202026-10-02%2014-35-34.png" width="90%" alt="Màn hình chi tiết sách">
+</p>
+
+#### Tủ sách
+
+<p align="center">
+  <img src="./docs/Screenshot%20From%202026-10-02%2014-35-46.png" width="90%" alt="Màn hình tủ sách">
+</p>
 
 ---
 
