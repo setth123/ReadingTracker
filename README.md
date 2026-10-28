@@ -80,7 +80,7 @@ mini-reading-tracker/
 │   │   ├── components/
 │   │   ├── pages/
 │   │   ├── services/
-│   │   ├── state/
+│   │   ├── stores/
 │   │   └── router/
 │   ├── package.json
 │   └── vite.config.js
@@ -392,7 +392,8 @@ Một số lỗi nghiệp vụ được xử lý riêng, ví dụ:
 * Sách đã tồn tại trong tủ → `409 Conflict`.
 * Dữ liệu request không hợp lệ → `400 Bad Request`.
 * Không tìm thấy sách → `404 Not Found`.
-* Lỗi hệ thống → `500 Internal Server Error`.
+* Open Library lỗi hoặc không phản hồi → `502 Bad Gateway` / `504 Gateway Timeout`.
+* Lỗi hệ thống → `500 Internal Server Error`. Chi tiết lỗi nội bộ (vd: lỗi Prisma) chỉ được ghi log, không trả về client.
 
 ---
 
@@ -583,36 +584,29 @@ Thông tin kết nối database không được lưu trực tiếp trong source 
 
 ### Search cache
 
-Kết quả tìm kiếm được cache theo:
-
-```text
-keyword + page + limit
-```
-
-Thời gian cache:
-
-```text
-5 phút
-```
+Kết quả tìm kiếm được cache theo `keyword (không phân biệt hoa thường) + page + limit`, thời gian sống **5 phút**.
 
 ### Book detail cache
 
-Thông tin chi tiết của một cuốn sách cũng được cache theo `workId`.
+Thông tin chi tiết của một cuốn sách được cache theo `workId`, thời gian sống **5 phút**.
+Trạng thái `isAdded` không được cache mà luôn lấy mới từ database.
 
-Thời gian cache:
+### Cách cache hoạt động (`utils/cache.js`)
 
-```text
-5 phút
-```
+* Mỗi cache giữ tối đa **200 mục**, khi đầy sẽ bỏ mục ít được dùng nhất (LRU) để bộ nhớ không tăng mãi.
+* Cache lưu **Promise** thay vì kết quả, nên nhiều request cùng lúc cho cùng một key chỉ gọi Open Library một lần.
+* Request lỗi không được lưu vào cache.
+* Mỗi request đến Open Library có **timeout 8 giây** (lỗi `504`); lỗi kết nối hoặc lỗi từ Open Library trả về `502`.
 
 ### Search history
 
 Lịch sử tìm kiếm được lưu trong memory của Backend.
 
 * Tối đa lưu 50 từ khóa.
-* Mỗi từ khóa có thời gian sống 24 giờ.
+* Mỗi từ khóa có thời gian sống 7 ngày.
+* Không phân biệt hoa thường: "Harry Potter" và "harry potter" chỉ tính là một từ khóa.
 * API autocomplete chỉ trả về tối đa 5 kết quả gần nhất.
-* Lịch sử chỉ được lưu khi người dùng thực hiện tìm kiếm thực tế.
+* Lịch sử chỉ được lưu khi tìm kiếm thành công.
 
 ---
 

@@ -36,6 +36,13 @@ const statusTabs = [
   { value: "COMPLETED", label: "Đã đọc" },
 ];
 
+// Status -> field tương ứng trong statistics
+const STATISTIC_KEYS = {
+  WANT_TO_READ: "wantToRead",
+  READING: "reading",
+  COMPLETED: "completed",
+};
+
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -120,66 +127,28 @@ const changeStatus = async (status) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Statistics                                                                 */
+/* Statistics (cập nhật tại chỗ, không cần gọi lại API)                      */
 /* -------------------------------------------------------------------------- */
 
-const updateStatisticsAfterStatusChange = (oldStatus, newStatus) => {
-  if (oldStatus === newStatus) {
+const changeStatistic = (status, delta) => {
+  const key = STATISTIC_KEYS[status];
+
+  statistics.value[key] = Math.max(0, statistics.value[key] + delta);
+};
+
+/**
+ * Gọi sau khi status của book có thể đã đổi (backend có thể tự đổi status,
+ * vd: đọc đến trang cuối -> COMPLETED): cập nhật thống kê và
+ * gỡ sách khỏi danh sách nếu không còn khớp tab đang lọc.
+ */
+const handleStatusChange = (book, oldStatus) => {
+  if (book.status === oldStatus) {
     return;
   }
 
-  const stats = { ...statistics.value };
+  changeStatistic(oldStatus, -1);
+  changeStatistic(book.status, +1);
 
-  if (oldStatus === "WANT_TO_READ") {
-    stats.wantToRead = Math.max(0, stats.wantToRead - 1);
-  }
-
-  if (oldStatus === "READING") {
-    stats.reading = Math.max(0, stats.reading - 1);
-  }
-
-  if (oldStatus === "COMPLETED") {
-    stats.completed = Math.max(0, stats.completed - 1);
-  }
-
-  if (newStatus === "WANT_TO_READ") {
-    stats.wantToRead += 1;
-  }
-
-  if (newStatus === "READING") {
-    stats.reading += 1;
-  }
-
-  if (newStatus === "COMPLETED") {
-    stats.completed += 1;
-  }
-
-  statistics.value = stats;
-};
-
-const updateStatisticsAfterDelete = (book) => {
-  const stats = {
-    ...statistics.value,
-    total: Math.max(0, statistics.value.total - 1),
-  };
-
-  if (book.status === "WANT_TO_READ") {
-    stats.wantToRead = Math.max(0, stats.wantToRead - 1);
-  }
-
-  if (book.status === "READING") {
-    stats.reading = Math.max(0, stats.reading - 1);
-  }
-
-  if (book.status === "COMPLETED") {
-    stats.completed = Math.max(0, stats.completed - 1);
-  }
-
-  statistics.value = stats;
-};
-
-/** Gỡ sách khỏi danh sách nếu không còn khớp tab đang lọc */
-const removeIfNotInActiveTab = (book) => {
   if (activeStatus.value !== "" && book.status !== activeStatus.value) {
     books.value = books.value.filter((item) => item.id !== book.id);
   }
@@ -252,30 +221,21 @@ const updatePage = (book, event) => {
         return;
       }
 
-      // Xoá timer trước để applyServerBook biết đã hết gõ dở
-      pageUpdateTimers.delete(book.id);
-
+      // Đây là response mới nhất nên lấy luôn currentPage từ server
       const oldStatus = book.status;
-      const updatedBook = response.data;
-
-      applyServerBook(book, updatedBook);
-
-      if (oldStatus !== updatedBook.status) {
-        updateStatisticsAfterStatusChange(oldStatus, updatedBook.status);
-        removeIfNotInActiveTab(book);
-      }
+      Object.assign(book, response.data);
+      handleStatusChange(book, oldStatus);
     } catch (err) {
       if (!isLatest()) {
         return;
       }
-
-      pageUpdateTimers.delete(book.id);
 
       alert(getErrorMessage(err, "Không thể cập nhật số trang."));
 
       // Đồng bộ lại với backend
       await loadBookshelf();
     } finally {
+      // Hết gõ dở: các response khác (status, rating...) được phép ghi currentPage
       if (isLatest()) {
         pageUpdateTimers.delete(book.id);
       }
@@ -305,70 +265,49 @@ const normalizePageInput = (book, event) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Các cập nhật khác                                                          */
+/* Các cập nhật khác: status, rating, note                                    */
 /* -------------------------------------------------------------------------- */
 
-const updateStatus = async (book, event) => {
-  const newStatus = event.target.value;
+/**
+ * Gửi update lên server rồi gộp kết quả vào book.
+ * Lỗi thì báo cho người dùng; book giữ nguyên giá trị cũ.
+ */
+const saveBook = async (book, data, fallbackMessage) => {
   const oldStatus = book.status;
 
-  if (newStatus === oldStatus) {
-    return;
-  }
-
   try {
-    const response = await updateBookshelfBook(book.id, {
-      status: newStatus,
-    });
+    const response = await updateBookshelfBook(book.id, data);
 
-    const updatedBook = response.data;
-
-    applyServerBook(book, updatedBook);
-
-    // Dùng status thực tế từ backend thay vì newStatus,
-    // vì backend có thể áp dụng business rule khác.
-    updateStatisticsAfterStatusChange(oldStatus, updatedBook.status);
-
-    removeIfNotInActiveTab(book);
+    applyServerBook(book, response.data);
+    handleStatusChange(book, oldStatus);
   } catch (err) {
-    event.target.value = oldStatus;
-
-    alert(getErrorMessage(err, "Không thể cập nhật trạng thái."));
+    alert(getErrorMessage(err, fallbackMessage));
   }
+};
+
+// Sau khi lưu (thành công hay lỗi), luôn đưa ô nhập về đúng giá trị của book.
+// Vd: backend giữ COMPLETED khi sách đang ở trang cuối thì select phải hiện lại "Đã đọc".
+
+const updateStatus = async (book, event) => {
+  await saveBook(book, { status: event.target.value }, "Không thể cập nhật trạng thái.");
+
+  event.target.value = book.status;
 };
 
 const updateRating = async (book, event) => {
   const value = event.target.value;
-  const rating = value === "" ? null : Number(value);
 
-  const oldRating = book.rating;
+  await saveBook(book, { rating: value === "" ? null : Number(value) }, "Không thể cập nhật đánh giá.");
 
-  try {
-    const response = await updateBookshelfBook(book.id, { rating });
-
-    applyServerBook(book, response.data);
-  } catch (err) {
-    event.target.value = oldRating || "";
-
-    alert(getErrorMessage(err, "Không thể cập nhật đánh giá."));
-  }
+  event.target.value = book.rating ?? "";
 };
 
 const updateNote = async (book, event) => {
   const note = event.target.value.trim();
-  const oldNote = book.note;
 
-  try {
-    const response = await updateBookshelfBook(book.id, {
-      note: note || null,
-    });
+  await saveBook(book, { note: note || null }, "Không thể cập nhật ghi chú.");
 
-    applyServerBook(book, response.data);
-  } catch (err) {
-    event.target.value = oldNote || "";
-
-    alert(getErrorMessage(err, "Không thể cập nhật ghi chú."));
-  }
+  event.target.value = book.note ?? "";
 };
 
 const deleteBook = async (book) => {
@@ -390,7 +329,8 @@ const deleteBook = async (book) => {
 
     books.value = books.value.filter((item) => item.id !== book.id);
 
-    updateStatisticsAfterDelete(book);
+    statistics.value.total = Math.max(0, statistics.value.total - 1);
+    changeStatistic(book.status, -1);
   } catch (err) {
     alert(getErrorMessage(err, "Không thể xoá sách. Vui lòng thử lại."));
   }

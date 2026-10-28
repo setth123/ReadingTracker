@@ -1,55 +1,42 @@
-// src/services/search-history.service.js
-
 const SEARCH_HISTORY_TTL = 7 * 24 * 60 * 60 * 1000;
 const MAX_HISTORY_SIZE = 50;
+const MAX_SUGGESTIONS = 5;
 
+// Key: lowercase keyword, so "Harry" and "harry" count as one entry.
+// Value: the keyword as last typed + when it was searched.
+// Map keeps insertion order, so the newest search is always at the end.
 const searchHistory = new Map();
 
-const cleanupHistory = () => {
+const removeExpired = () => {
   const now = Date.now();
 
-  for (const [keyword, timestamp] of searchHistory.entries()) {
-    if (now - timestamp > SEARCH_HISTORY_TTL) {
-      searchHistory.delete(keyword);
+  for (const [key, { searchedAt }] of searchHistory) {
+    if (now - searchedAt > SEARCH_HISTORY_TTL) {
+      searchHistory.delete(key);
     }
   }
 };
 
 export const saveSearchHistory = (keyword) => {
-  cleanupHistory();
+  const key = keyword.toLowerCase();
 
-  const normalizedKeyword = keyword.trim();
+  // Delete first so the keyword moves to the end of the Map
+  searchHistory.delete(key);
+  searchHistory.set(key, { keyword, searchedAt: Date.now() });
 
-  if (!normalizedKeyword) {
-    return;
-  }
-
-  // Nếu đã tồn tại thì xóa trước để đưa nó lên cuối Map
-  searchHistory.delete(normalizedKeyword);
-
-  searchHistory.set(normalizedKeyword, Date.now());
-
-  // Chỉ giữ tối đa 50 keyword
-  while (searchHistory.size > MAX_HISTORY_SIZE) {
-    const oldestKeyword = searchHistory.keys().next().value;
-    searchHistory.delete(oldestKeyword);
+  if (searchHistory.size > MAX_HISTORY_SIZE) {
+    searchHistory.delete(searchHistory.keys().next().value);
   }
 };
 
 export const getSearchHistory = (keyword = "") => {
-  cleanupHistory();
+  removeExpired();
 
-  const normalizedKeyword = keyword.trim().toLowerCase();
+  const query = keyword.toLowerCase();
 
-  return [...searchHistory.entries()]
+  return [...searchHistory]
     .reverse()
-    .filter(([historyKeyword]) => {
-      if (!normalizedKeyword) {
-        return true;
-      }
-
-      return historyKeyword.toLowerCase().includes(normalizedKeyword);
-    })
-    .slice(0, 5)
-    .map(([historyKeyword]) => historyKeyword);
+    .filter(([key]) => key.includes(query))
+    .slice(0, MAX_SUGGESTIONS)
+    .map(([, { keyword: historyKeyword }]) => historyKeyword);
 };

@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import 'dotenv/config';
-import errorHandler from "./middelwares/error.middleware.js";
+import errorHandler from "./middlewares/error.middleware.js";
 
 import bookshelfRoutes from "./routes/bookshelf.routes.js";
 import bookRoutes from "./routes/book.routes.js";

@@ -1,27 +1,11 @@
 <script setup>
-import {
-  ref,
-  onMounted,
-  onBeforeUnmount,
-} from "vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 
 import BookCard from "../components/BookCard.vue";
-
-import {
-  searchBooks,
-  getSearchHistory,
-} from "../services/book.service.js";
-
-import {
-  getBookshelf,
-  addToBookshelf,
-} from "../services/bookshelf.service.js";
-
-import {
-  searchKeyword,
-  searchPage,
-} from "../stores/appState.js"
+import { searchBooks, getSearchHistory } from "../services/book.service.js";
+import { getBookshelf, addToBookshelf } from "../services/bookshelf.service.js";
+import { searchKeyword, searchPage } from "../stores/appState.js";
 
 import "../assets/search.css";
 
@@ -49,19 +33,18 @@ const selectedBook = ref(null);
 const selectedStatus = ref("WANT_TO_READ");
 
 // ===============================
-// SEARCH CONTROL
+// SEARCH HISTORY (debounce 500ms)
 // ===============================
 
 let historyTimeout = null;
 
-// ===============================
-// SEARCH HISTORY
-// ===============================
+const cancelHistoryLoad = () => {
+  clearTimeout(historyTimeout);
+  historyTimeout = null;
+};
 
-const loadSearchHistory = (value = "") => {
-  if (historyTimeout) {
-    clearTimeout(historyTimeout);
-  }
+const loadSearchHistory = (value) => {
+  cancelHistoryLoad();
 
   historyTimeout = setTimeout(async () => {
     try {
@@ -70,124 +53,56 @@ const loadSearchHistory = (value = "") => {
       searchHistory.value = response.data.keywords;
       showSearchHistory.value = true;
     } catch (error) {
-      console.error(
-        "Failed to load search history:",
-        error
-      );
+      console.error("Failed to load search history:", error);
     }
   }, 500);
 };
 
-const handleSearchFocus = () => {
-  loadSearchHistory(keyword.value);
-};
-
-const handleSearchInput = (event) => {
-  keyword.value = event.target.value;
-
-  loadSearchHistory(keyword.value);
-};
-
-const handleSelectSearchHistory = async (
-  historyKeyword
-) => {
+const handleSelectSearchHistory = async (historyKeyword) => {
+  cancelHistoryLoad();
   keyword.value = historyKeyword;
 
-  showSearchHistory.value = false;
-
-  searchPage.value = 1;
-
-  await search(1, false);
-};
-
-// ===============================
-// RESET SEARCH
-// ===============================
-
-const resetSearch = () => {
-  books.value = [];
-  searched.value = false;
-
-  currentPage.value = 1;
-  totalPages.value = 1;
+  await search(1);
 };
 
 // ===============================
 // SEARCH
 // ===============================
 
-const search = async (
-  page = 1,
-  saveHistory = false
-) => {
+const search = async (page) => {
   const value = keyword.value.trim();
-  if(value.length<3){
+
+  if (value.length < 3) {
     alert("Từ khóa phải dài hơn 2 ký tự");
     return;
   }
+
   loading.value = true;
   showSearchHistory.value = false;
 
   try {
-    const response = await searchBooks({
-      q: value,
-      page,
-    });
+    const response = await searchBooks({ q: value, page });
+    const { pagination } = response.data;
 
     books.value = response.data.books;
-
-    currentPage.value =
-      response.data.pagination.page;
-
-    totalPages.value = Math.max(
-      1,
-      Math.ceil(
-        response.data.pagination.total /
-          response.data.pagination.limit
-      )
-    );
-
+    currentPage.value = pagination.page;
+    totalPages.value = Math.max(1, Math.ceil(pagination.total / pagination.limit));
     searched.value = true;
 
-    // Lưu trạng thái tìm kiếm để giữ lại
-    // khi chuyển sang route khác.
+    // Lưu trạng thái tìm kiếm để khôi phục khi quay lại từ route khác
     searchKeyword.value = value;
     searchPage.value = page;
-
-    // Backend đã lưu history khi search.
-    // Chỉ reload suggestion để UI có dữ liệu mới nhất.
-    if (saveHistory) {
-      const historyResponse =
-        await getSearchHistory();
-
-      searchHistory.value =
-        historyResponse.data.keywords;
-    }
   } catch (error) {
-    alert(
-      error.response?.data?.message ||
-        "Không thể tìm kiếm sách."
-    );
+    alert(error.response?.data?.message || "Không thể tìm kiếm sách.");
   } finally {
     loading.value = false;
   }
 };
 
-// ===============================
-// SUBMIT SEARCH
-// ===============================
-
 const handleSubmit = async () => {
-  if (historyTimeout) {
-    clearTimeout(historyTimeout);
-    historyTimeout = null;
-  }
+  cancelHistoryLoad();
 
-  const value = keyword.value.trim();
-
-  searchPage.value = 1;
-
-  await search(1, true);
+  await search(1);
 };
 
 // ===============================
@@ -198,16 +113,9 @@ const loadBookshelf = async () => {
   try {
     const response = await getBookshelf();
 
-    bookshelfWorkIds.value = new Set(
-      response.data.books.map(
-        (book) => book.workId
-      )
-    );
+    bookshelfWorkIds.value = new Set(response.data.books.map((book) => book.workId));
   } catch (error) {
-    alert(
-      error.response?.data?.message ||
-        "Không thể tải tủ sách."
-    );
+    alert(error.response?.data?.message || "Không thể tải tủ sách.");
   }
 };
 
@@ -237,20 +145,12 @@ const confirmAddBook = async () => {
       status: selectedStatus.value,
     });
 
-    bookshelfWorkIds.value = new Set(
-      bookshelfWorkIds.value
-    );
-
-    bookshelfWorkIds.value.add(
-      selectedBook.value.workId
-    );
+    // Tạo Set mới để Vue nhận biết thay đổi
+    bookshelfWorkIds.value = new Set([...bookshelfWorkIds.value, selectedBook.value.workId]);
 
     closeAddModal();
   } catch (error) {
-    alert(
-      error.response?.data?.message ||
-        "Không thể thêm sách vào tủ."
-    );
+    alert(error.response?.data?.message || "Không thể thêm sách vào tủ.");
   }
 };
 
@@ -279,39 +179,20 @@ const openBookDetail = (book) => {
 // ===============================
 
 const goToPage = async (page) => {
-  if (
-    page < 1 ||
-    page > totalPages.value ||
-    page === currentPage.value ||
-    loading.value
-  ) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value || loading.value) {
     return;
   }
 
-  searchPage.value = page;
-
-  await search(page, false);
+  await search(page);
 };
 
-const getPageNumbers = () => {
-  const pages = [];
+// Hiển thị tối đa 2 trang ở mỗi bên trang hiện tại
+const pageNumbers = computed(() => {
+  const start = Math.max(1, currentPage.value - 2);
+  const end = Math.min(totalPages.value, currentPage.value + 2);
 
-  const start = Math.max(
-    1,
-    currentPage.value - 2
-  );
-
-  const end = Math.min(
-    totalPages.value,
-    currentPage.value + 2
-  );
-
-  for (let page = start; page <= end; page++) {
-    pages.push(page);
-  }
-
-  return pages;
-};
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+});
 
 // ===============================
 // LIFECYCLE
@@ -320,37 +201,15 @@ const getPageNumbers = () => {
 onMounted(async () => {
   await loadBookshelf();
 
-  // Load history để hiển thị khi focus vào input.
-  try {
-    const response = await getSearchHistory();
-
-    searchHistory.value =
-      response.data.keywords;
-  } catch (error) {
-    console.error(
-      "Failed to load search history:",
-      error
-    );
-  }
-
-  // Khôi phục search trước đó nếu user
-  // quay lại SearchPage từ route khác.
+  // Khôi phục lần tìm kiếm trước nếu user quay lại từ route khác
   if (searchKeyword.value) {
     keyword.value = searchKeyword.value;
 
-    await search(
-      searchPage.value || 1,
-      false
-    );
+    await search(searchPage.value);
   }
 });
 
-onBeforeUnmount(() => {
-  if (historyTimeout) {
-    clearTimeout(historyTimeout);
-    historyTimeout = null;
-  }
-});
+onBeforeUnmount(cancelHistoryLoad);
 </script>
 
 <template>
@@ -374,12 +233,12 @@ onBeforeUnmount(() => {
         >
           <div class="search-input-wrapper">
             <input
-              :value="keyword"
+              v-model="keyword"
               class="search-input"
               type="text"
               placeholder="Nhập tên sách hoặc tác giả..."
-              @input="handleSearchInput"
-              @focus="handleSearchFocus"
+              @input="loadSearchHistory($event.target.value)"
+              @focus="loadSearchHistory(keyword)"
             />
 
             <!-- ===============================
@@ -521,7 +380,7 @@ onBeforeUnmount(() => {
         </button>
 
         <button
-          v-for="page in getPageNumbers()"
+          v-for="page in pageNumbers"
           :key="page"
           :class="{
             active:

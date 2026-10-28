@@ -1,63 +1,34 @@
-import  {getAllBooks, getBookById,createBookShelf,updateBookShelf,deleteBookShelf} from "../services/bookshelf.service.js";
+import { getAllBooks, getBookById, createBookShelf, updateBookShelf, deleteBookShelf } from "../services/bookshelf.service.js";
 import { successResponse } from "../utils/response.js";
 
-export const getBooks = async (req, res, next) => {
-  try {
-    const {status}=req.validateQuery || {};
-    const books = await getAllBooks(status);
+// Express 5 forwards errors from async handlers to the error middleware, so no try/catch is needed
 
-    return successResponse(res, books);
-  } catch (error) {
-    next(error);
-  }
+export const getBooks = async (req, res) => {
+  const books = await getAllBooks(req.validated.query.status);
+
+  return successResponse(res, books);
 };
 
-export const getBook = async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
+export const getBook = async (req, res) => {
+  const book = await getBookById(req.validated.params.id);
 
-    const book = await getBookById(id);
-
-    return successResponse(res, book);
-  } catch (error) {
-    next(error);
-  }
+  return successResponse(res, book);
 };
 
-export const createBook = async(req, res,next)=>{
-    try {
-      const book = await createBookShelf(
-        req.validatedBody
-      );
+export const createBook = async (req, res) => {
+  const book = await createBookShelf(req.validated.body);
 
-      return successResponse(res, book, 201);
-    } catch (error) {
-      next(error);
-    }
-}
-
-export const updateBook = async (req, res, next) => {
-  try {
-    const book = await updateBookShelf(
-      req.params.id,
-      req.validatedBody
-    );
-
-    return successResponse(res, book);
-  } catch (error) {
-    next(error);
-  }
+  return successResponse(res, book, 201);
 };
 
-export const deleteBook = async (req, res, next) => {
-  try {
-    await deleteBookShelf(req.params.id);
+export const updateBook = async (req, res) => {
+  const book = await updateBookShelf(req.validated.params.id, req.validated.body);
 
-    return successResponse(res, {
-      message: "Book deleted successfully",
-    });
-  } catch (error) {
-    next(error);
-  }
+  return successResponse(res, book);
 };
 
+export const deleteBook = async (req, res) => {
+  await deleteBookShelf(req.validated.params.id);
+
+  return successResponse(res, { message: "Book deleted successfully" });
+};

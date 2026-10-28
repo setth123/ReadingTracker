@@ -1,89 +1,69 @@
-const OPEN_LIBRARY_URL = process.env.OPEN_LIBRARY_URL || "https://openlibrary.org";
 import AppError from "../utils/AppError.js";
-import {mapWorkBook} from "../utils/book.mapper.js";
+import { createCache } from "../utils/cache.js";
+import { mapWorkBook } from "../utils/book.mapper.js";
 
+const OPEN_LIBRARY_URL = process.env.OPEN_LIBRARY_URL || "https://openlibrary.org";
 
-const bookDetailCache = new Map();
+const REQUEST_TIMEOUT_MS = 8000;
 
-const BOOK_DETAIL_CACHE_TTL = 5 * 60 * 1000;
+const searchCache = createCache({ ttl: 5 * 60 * 1000, maxSize: 200 });
+const bookDetailCache = createCache({ ttl: 5 * 60 * 1000, maxSize: 200 });
 
-const searchCache = new Map();
+// Turns every Open Library failure (timeout, network, bad status) into an AppError
+const fetchOpenLibrary = async (url, notFoundMessage = "Not found in Open Library") => {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
 
-const SEARCH_CACHE_TTL = 5 * 60 * 1000;
+    if (response.status === 404) {
+      throw new AppError(notFoundMessage, 404);
+    }
 
-export const searchPaginatedBooks = async (keyword, page = 1, limit = 20) => {
-  const cacheKey = `${keyword.trim().toLowerCase()}:${page}:${limit}`;
+    if (!response.ok) {
+      throw new AppError("Failed to fetch data from Open Library", 502);
+    }
 
-  const cached = searchCache.get(cacheKey);
+    return await response.json();
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
 
-  if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL) {
-    return cached.value;
+    if (error.name === "TimeoutError") {
+      throw new AppError("Open Library took too long to respond", 504);
+    }
+
+    throw new AppError("Could not connect to Open Library", 502);
   }
+};
 
-  const url = new URL(`${OPEN_LIBRARY_URL}/search.json`);
+export const searchPaginatedBooks = (keyword, page = 1, limit = 20) => {
+  const cacheKey = `${keyword.toLowerCase()}:${page}:${limit}`;
 
-  url.searchParams.set("q", keyword);
-  url.searchParams.set("page", page);
-  url.searchParams.set("limit", limit);
-  url.searchParams.set(
-  "fields",
-  "numFound,key,title,author_name,cover_i,first_publish_year"
-);
+  return searchCache(cacheKey, () => {
+    const url = new URL(`${OPEN_LIBRARY_URL}/search.json`);
 
-  const response = await fetch(url);
+    url.searchParams.set("q", keyword);
+    url.searchParams.set("page", page);
+    url.searchParams.set("limit", limit);
+    url.searchParams.set("fields", "numFound,key,title,author_name,cover_i,first_publish_year");
 
-  if (!response.ok) {
-    throw new AppError("Failed to fetch books from Open Library", 502);
-  }
-
-  const data = await response.json();
-  
-  searchCache.set(cacheKey, {
-    value: data,
-    timestamp: Date.now(),
+    return fetchOpenLibrary(url);
   });
-
-  return data;
 };
 
-export const getWork = async (workId) => {
-  const url = `${OPEN_LIBRARY_URL}/works/${workId}.json`;
-
-  const response = await fetch(url);
-
-  if (response.status === 404) {
-    throw new AppError(
-      "Book not found in Open Library",
-      404
-    );
-  }
-
-  if (!response.ok) {
-    throw new AppError(
-      "Failed to fetch book from Open Library",
-      502
-    );
-  }
-
-  return response.json();
-};
+const getWork = (workId) =>
+  fetchOpenLibrary(`${OPEN_LIBRARY_URL}/works/${workId}.json`, "Book not found in Open Library");
 
 // One search request gives the same cover as the search page, a page count and author names,
 // which is much faster than fetching editions.json plus every author separately
-export const getWorkSearchData = async (workId) => {
+const getWorkSearchData = async (workId) => {
   const url = new URL(`${OPEN_LIBRARY_URL}/search.json`);
 
   url.searchParams.set("q", `key:/works/${workId}`);
   url.searchParams.set("fields", "cover_i,number_of_pages_median,author_name,first_publish_year");
   url.searchParams.set("limit", 1);
 
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new AppError("Failed to fetch book from Open Library", 502);
-  }
-
-  const data = await response.json();
+  const data = await fetchOpenLibrary(url);
   const doc = data.docs?.[0] || {};
 
   return {
@@ -94,24 +74,12 @@ export const getWorkSearchData = async (workId) => {
   };
 };
 
-export const getBookDetailData = async (workId) => {
-  const cached = bookDetailCache.get(workId);
+export const getBookDetailData = (workId) =>
+  bookDetailCache(workId, async () => {
+    const [work, searchData] = await Promise.all([
+      getWork(workId),
+      getWorkSearchData(workId),
+    ]);
 
-  if (cached && Date.now() - cached.timestamp < BOOK_DETAIL_CACHE_TTL) {
-    return cached.value;
-  }
-
-  const [work, searchData] = await Promise.all([
-    getWork(workId),
-    getWorkSearchData(workId),
-  ]);
-
-  const book = mapWorkBook(work, searchData);
-
-  bookDetailCache.set(workId, {
-    value: book,
-    timestamp: Date.now(),
+    return mapWorkBook(work, searchData);
   });
-
-  return book;
-};
